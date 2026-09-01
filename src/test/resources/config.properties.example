@@ -1,0 +1,18 @@
+# Where the tests point and who they log in as.
+# Any value here can be overridden on the command line:
+#     mvn test -DbaseUrl=https://staging.example.com
+
+baseUrl = https://www.testnearz.co.in
+
+# Salon 4536 - the real QA salon, with real data. Journeys only READ here.
+ownerSalonId = 4536
+ownerToken   = PASTE_4536_TOKEN
+
+# Salon 4550 - empty. Every journey that WRITES writes here.
+journeySalonId = 4550
+journeyToken   = PASTE_4550_TOKEN
+
+# Salon 1725 - the second tenant, for isolation checks.
+# It must keep its seeded data, or the tenant-leak test has nothing to detect.
+otherSalonId = 1725
+otherToken   = PASTE_1725_TOKEN

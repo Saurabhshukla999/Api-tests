@@ -1,0 +1,23 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.nearz:nearz-api-tests >----------------------
+[INFO] Building Nearz API end-to-end journey tests 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- allure:2.12.0:report (default-cli) @ nearz-api-tests ---
+[INFO] Allure installation directory C:\Users\saura\Documents\api-service\nearz-api-tests/.allure
+[INFO] Try to finding out allure 2.29.0
+[INFO] Generate Allure report (report) with version 2.29.0
+[INFO] Generate Allure report to C:\Users\saura\Documents\api-service\nearz-api-tests\target\site/allure-maven-plugin
+[INFO] Found results directory C:\Users\saura\Documents\api-service\nearz-api-tests\target\allure-results
+[INFO] Can't find information about categories
+[INFO] Generate report to C:\Users\saura\Documents\api-service\nearz-api-tests\target\site\allure-maven-plugin
+Report successfully generated to C:\Users\saura\Documents\api-service\nearz-api-tests\target\site\allure-maven-plugin
+[INFO] Report generated successfully.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  6.315 s
+[INFO] Finished at: 2026-08-31T09:48:44+05:30
+[INFO] ------------------------------------------------------------------------

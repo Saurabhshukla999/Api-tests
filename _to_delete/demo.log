@@ -1,0 +1,132 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.nearz:nearz-api-tests >----------------------
+[INFO] Building Nearz API end-to-end journey tests 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ nearz-api-tests ---
+[INFO] Deleting C:\Users\saura\Documents\api-service\nearz-api-tests\target
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ nearz-api-tests ---
+[INFO] skip non existing resourceDirectory C:\Users\saura\Documents\api-service\nearz-api-tests\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ nearz-api-tests ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- resources:3.4.0:testResources (default-testResources) @ nearz-api-tests ---
+[INFO] Copying 2 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ nearz-api-tests ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 13 source files with javac [debug release 17] to target\test-classes
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ nearz-api-tests ---
+[INFO] Using auto detected provider org.apache.maven.surefire.testng.TestNGProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.nearz.api.DemoFailingTest
+Request URI:	https://www.testnearz.co.in/salons/4550/working_days
+Request URI:	https://www.testnearz.co.in/api/v1/billing/tax_config
+Request URI:	https://www.testnearz.co.in/salons/4550/settings
+Request URI:	https://www.testnearz.co.in/api/v1/billing/services?per_page=200
+Request URI:	https://www.testnearz.co.in/api/v1/billing/staff
+Request URI:	https://www.testnearz.co.in/api/v1/billing/products?per_page=200
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/sales/summary?range=today&_qa=567424279207200
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/payments/summary?range=today&_qa=567424744196000
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/customers/summary?range=today&_qa=567425238583300
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/services/summary?range=today&_qa=567425810141200
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/staff_performance/summary?range=today&_qa=567426326101900
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/profit/summary?range=today&_qa=567426839471900
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries/659/convert
+Request URI:	https://www.testnearz.co.in/salons/4550/appointments?date=2026-08-31&page=1&per_page=100
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments/11169/status
+Request URI:	https://www.testnearz.co.in/api/v1/billing/bills
+Request URI:	https://www.testnearz.co.in/api/v1/billing/bills/958
+Request URI:	https://www.testnearz.co.in/api/v1/billing/bills/958/finalize
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/sales/summary?range=today&_qa=567436433709800
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/payments/summary?range=today&_qa=567436952295100
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/customers/summary?range=today&_qa=567437398997700
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/services/summary?range=today&_qa=567437957558300
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/staff_performance/summary?range=today&_qa=567438382856300
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/profit/summary?range=today&_qa=567438783746000
+Request URI:	https://www.testnearz.co.in/api/v1/billing/bills/958
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 26.70 s <<< FAILURE! -- in com.nearz.api.DemoFailingTest
+[ERROR] com.nearz.api.DemoFailingTest.demo_revenueDoesNotMatch -- Time elapsed: 17.60 s <<< FAILURE!
+java.lang.AssertionError: 
+
+  sales.total_revenue
+      expected to move      1200.00
+      actually moved        1180.00   (0.00 -> 1180.00) expected [true] but found [false]
+	at org.testng.Assert.fail(Assert.java:111)
+	at org.testng.Assert.failNotEquals(Assert.java:1578)
+	at org.testng.Assert.assertTrue(Assert.java:57)
+	at com.nearz.api.BaseJourneyTest.expectMoved(BaseJourneyTest.java:137)
+	at com.nearz.api.DemoFailingTest.demo_revenueDoesNotMatch(DemoFailingTest.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at org.testng.internal.invokers.MethodInvocationHelper.invokeMethod(MethodInvocationHelper.java:141)
+	at org.testng.internal.invokers.TestInvoker.invokeMethod(TestInvoker.java:686)
+	at org.testng.internal.invokers.TestInvoker.invokeTestMethod(TestInvoker.java:230)
+	at org.testng.internal.invokers.MethodRunner.runInSequence(MethodRunner.java:63)
+	at org.testng.internal.invokers.TestInvoker$MethodInvocationAgent.invoke(TestInvoker.java:992)
+	at org.testng.internal.invokers.TestInvoker.invokeTestMethods(TestInvoker.java:203)
+	at org.testng.internal.invokers.TestMethodWorker.invokeTestMethods(TestMethodWorker.java:154)
+	at org.testng.internal.invokers.TestMethodWorker.run(TestMethodWorker.java:134)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1612)
+	at org.testng.TestRunner.privateRun(TestRunner.java:739)
+	at org.testng.TestRunner.run(TestRunner.java:614)
+	at org.testng.SuiteRunner.runTest(SuiteRunner.java:421)
+	at org.testng.SuiteRunner.runSequentially(SuiteRunner.java:413)
+	at org.testng.SuiteRunner.privateRun(SuiteRunner.java:373)
+	at org.testng.SuiteRunner.run(SuiteRunner.java:312)
+	at org.testng.SuiteRunnerWorker.runSuite(SuiteRunnerWorker.java:52)
+	at org.testng.SuiteRunnerWorker.run(SuiteRunnerWorker.java:95)
+	at org.testng.TestNG.runSuitesSequentially(TestNG.java:1274)
+	at org.testng.TestNG.runSuitesLocally(TestNG.java:1208)
+	at org.testng.TestNG.runSuites(TestNG.java:1112)
+	at org.testng.TestNG.run(TestNG.java:1079)
+	at org.apache.maven.surefire.testng.TestNGExecutor.run(TestNGExecutor.java:155)
+	at org.apache.maven.surefire.testng.TestNGDirectoryTestSuite.executeSingleClass(TestNGDirectoryTestSuite.java:102)
+	at org.apache.maven.surefire.testng.TestNGDirectoryTestSuite.execute(TestNGDirectoryTestSuite.java:91)
+	at org.apache.maven.surefire.testng.TestNGProvider.invoke(TestNGProvider.java:137)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   DemoFailingTest.demo_revenueDoesNotMatch:63->BaseJourneyTest.expectMoved:137 
+  sales.total_revenue
+      expected to move      1200.00
+      actually moved        1180.00   (0.00 -> 1180.00) expected [true] but found [false]
+[INFO] 
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  43.294 s
+[INFO] Finished at: 2026-08-31T09:48:11+05:30
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project nearz-api-tests: There are test failures.
+[ERROR] 
+[ERROR] Please refer to C:\Users\saura\Documents\api-service\nearz-api-tests\target\surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

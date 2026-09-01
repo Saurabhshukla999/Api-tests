@@ -1,0 +1,114 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.nearz:nearz-api-tests >----------------------
+[INFO] Building Nearz API end-to-end journey tests 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ nearz-api-tests ---
+[INFO] skip non existing resourceDirectory C:\Users\saura\Documents\api-service\nearz-api-tests\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ nearz-api-tests ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- resources:3.4.0:testResources (default-testResources) @ nearz-api-tests ---
+[INFO] Copying 2 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ nearz-api-tests ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 12 source files with javac [debug release 17] to target\test-classes
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ nearz-api-tests ---
+[INFO] Using auto detected provider org.apache.maven.surefire.testng.TestNGProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.nearz.api.ProbeBlock4
+Request URI:	https://www.testnearz.co.in/salons/4550/working_days
+Request URI:	https://www.testnearz.co.in/api/v1/billing/tax_config
+Request URI:	https://www.testnearz.co.in/salons/4550/settings
+Request URI:	https://www.testnearz.co.in/api/v1/billing/services?per_page=200
+Request URI:	https://www.testnearz.co.in/api/v1/billing/staff
+Request URI:	https://www.testnearz.co.in/api/v1/billing/products?per_page=200
+
+===== Q1 appointments report KPIs, and the 60s cache =====
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/appointments/summary?range=today
+kpis: {total_appointments={value=94, change_pct=-23, trend=down}, completed={value=72, change_pct=-37, trend=down}, cancelled={value=8, change_pct=100, trend=up}, no_show={value=4, change_pct=100, trend=up}, walk_ins={value=75, change_pct=-36, trend=down}, revenue_generated={value=0.0, currency=INR, label=Revenue Billed, change_pct=null, trend=neutral}, booked_value={value=84960.0, currency=INR, label=Booked Value (estimate), change_pct=-37, trend=down}}
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries/614/convert
+Request URI:	https://www.testnearz.co.in/salons/4550/appointments?date=2026-08-30&page=1&per_page=100
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/appointments/summary?range=today
+total_appointments  before=94  immediately after booking=94   (elapsed 7s)
+Request URI:	https://www.testnearz.co.in/salons/4550/reports/appointments/summary?range=today
+after 65s (cache TTL is 60s): 95
+VERDICT: if 'immediately' already moved, the cache is not biting.
+
+===== Q2 booking shapes Block 4 needs =====
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries/615/convert
+Request URI:	https://www.testnearz.co.in/appointments
+
+### book with NO staff_id -> 200
+{"data":{"id":11115,"date":"2026-08-30","start_time":"11:00 am","end_time":"11:30 am","status":"Pending","comment":null,"duration":"30","salon":{"id":4550,"name":"Saurabh test salon","full_address":"1 ,1 ,Mumbai ,Maharashtra","average_rating":0.0,"salon_type":"Unisex","minimum_service_cost":600,"distance":null,"minimum_discount_percent":0.0,"maximum_discount_percent":0.0,"image_urls":{},"seats":1,"active":true,"display_contact_no":false,"top_brand":false,"offer_type":null,"best_offers":false,"visits":8,"successive_discount":false,"discounts":[{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0}],"max_successive_disc ...
+Request URI:	https://www.testnearz.co.in/appointments
+
+### book TWO services, TWO stylists -> 200
+{"data":{"id":11116,"date":"2026-08-30","start_time":"11:30 am","end_time":"12:00 pm","status":"Pending","comment":null,"duration":"60","salon":{"id":4550,"name":"Saurabh test salon","full_address":"1 ,1 ,Mumbai ,Maharashtra","average_rating":0.0,"salon_type":"Unisex","minimum_service_cost":600,"distance":null,"minimum_discount_percent":0.0,"maximum_discount_percent":0.0,"image_urls":{},"seats":1,"active":true,"display_contact_no":false,"top_brand":false,"offer_type":null,"best_offers":false,"visits":8,"successive_discount":false,"discounts":[{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0}],"max_successive_disc ...
+
+===== Q3 status chain, reschedule =====
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries
+Request URI:	https://www.testnearz.co.in/salons/4550/enquiries/616/convert
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments/11117/status
+
+### PATCH status -> arrived -> 200
+{"data":{"appointment":{"id":11117,"ulid":"01M18VKK1N0BC00M62ZMZSM9MQ","guest":{"user_id":15515,"name":"QA PROBE Q3","phone":"9000233563","email":null},"date":"2026-08-30","start_time":"12:00","end_time":"12:30","duration_minutes":30,"status":"arrived","note":null,"items":[{"id":12127,"salon_service_id":54646,"service_name":"QA Haircut","duration_minutes":30,"price":1000.0,"amount":1000.0,"start_time":"12:00","end_time":"12:30","staff":{"id":86,"name":"QA Stylist 17","role":"Beautician","avatar_color":null,"resource":null}}],"totals":{"services":1000.0,"discount":0.0,"estimated":1180.0,"billed":null},"bill":null},"side_effects":{"feedback_request_sent":false}},"token":"eyJhbGciOiJIUzI1NiJ9.e ...
+Request URI:	https://www.testnearz.co.in/appointments/11117/status
+
+### PATCH status -> started -> 200
+{"data":{"appointment":{"id":11117,"ulid":"01M18VKK1N0BC00M62ZMZSM9MQ","guest":{"user_id":15515,"name":"QA PROBE Q3","phone":"9000233563","email":null},"date":"2026-08-30","start_time":"12:00","end_time":"12:30","duration_minutes":30,"status":"started","note":null,"items":[{"id":12127,"salon_service_id":54646,"service_name":"QA Haircut","duration_minutes":30,"price":1000.0,"amount":1000.0,"start_time":"12:00","end_time":"12:30","staff":{"id":86,"name":"QA Stylist 17","role":"Beautician","avatar_color":null,"resource":null}}],"totals":{"services":1000.0,"discount":0.0,"estimated":1180.0,"billed":null},"bill":null},"side_effects":{"feedback_request_sent":false}},"token":"eyJhbGciOiJIUzI1NiJ9.e ...
+Request URI:	https://www.testnearz.co.in/appointments/11117/status
+
+### PATCH status -> completed -> 200
+{"data":{"appointment":{"id":11117,"ulid":"01M18VKK1N0BC00M62ZMZSM9MQ","guest":{"user_id":15515,"name":"QA PROBE Q3","phone":"9000233563","email":null},"date":"2026-08-30","start_time":"12:00","end_time":"12:30","duration_minutes":30,"status":"completed","note":null,"items":[{"id":12127,"salon_service_id":54646,"service_name":"QA Haircut","duration_minutes":30,"price":1000.0,"amount":1000.0,"start_time":"12:00","end_time":"12:30","staff":{"id":86,"name":"QA Stylist 17","role":"Beautician","avatar_color":null,"resource":null}}],"totals":{"services":1000.0,"discount":0.0,"estimated":1180.0,"billed":null},"bill":null},"side_effects":{"feedback_request_sent":true}},"token":"eyJhbGciOiJIUzI1NiJ9. ...
+Request URI:	https://www.testnearz.co.in/appointments
+Request URI:	https://www.testnearz.co.in/appointments/11118/reschedule
+
+### PUT reschedule -> 422
+{"error":"Feature not enabled for this salon","token":"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxNDg5MiwidXNlcm5hbWUiOm51bGwsIm1vYmlsZSI6Iis5MTk5OTk5MTExMTEiLCJhbHRlcm5hdGl2ZV9tb2JpbGUiOiIiLCJyZWZlcnJhbF9jb2RlIjoiMDZjOWQ5IiwiZ2VuZGVyIjpudWxsLCJyb2xlIjoic2Fsb25fb3duZXIiLCJzYWxvbl9pZCI6NDU1MCwic2Fsb25fdHlwZSI6IlVuaXNleCIsInNhbG9uX2FjdGl2ZSI6dHJ1ZSwic3Vic2NyaXB0aW9uX3BsYW4iOnt9LCJwZXJtaXNzaW9uc19zYWxvbl9pZCI6NDU1MCwicm9sZV9uYW1lcyI6WyJPd25lciJdLCJwZXJtaXNzaW9ucyI6WyJkYXNoYm9hcmQuYWNjZXNzIiwiYXBwb2ludG1lbnRzLmFjY2VzcyIsImN1c3RvbWVycy5hY2Nlc3MiLCJiaWxsaW5nLmFjY2VzcyIsIm1hcmtldGluZy5hY2Nlc3MiLCJyZXBvcnRzLmFjY2VzcyIsImludmVudG9yeS5hY2Nlc3MiLCJlbXBsb3llZXMuYWNjZXNzIiwiYXR0ZW5kYW5jZS5hY2Nlc3MiLCJzZXR0aW5n ...
+
+===== Q4 what the API says to nonsense =====
+Request URI:	https://www.testnearz.co.in/appointments
+
+### bad salon_service_id -> 500
+
+Request URI:	https://www.testnearz.co.in/appointments
+
+### bad staff_id -> 500
+
+Request URI:	https://www.testnearz.co.in/appointments
+
+### bad mobile -> 200
+{"data":{"id":11120,"date":"2026-08-30","start_time":"12:00 pm","end_time":"12:30 pm","status":"Pending","comment":null,"duration":"30","salon":{"id":4550,"name":"Saurabh test salon","full_address":"1 ,1 ,Mumbai ,Maharashtra","average_rating":0.0,"salon_type":"Unisex","minimum_service_cost":600,"distance":null,"minimum_discount_percent":0.0,"maximum_discount_percent":0.0,"image_urls":{},"seats":1,"active":true,"display_contact_no":false,"top_brand":false,"offer_type":null,"best_offers":false,"visits":8,"successive_discount":false,"discounts":[{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0},{"successive_discount":0}],"max_successive_disc ...
+Request URI:	https://www.testnearz.co.in/appointments/99999999
+
+### GET a nonexistent appointment -> 404
+
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 107.2 s -- in com.nearz.api.ProbeBlock4
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:57 min
+[INFO] Finished at: 2026-08-30T13:42:15+05:30
+[INFO] ------------------------------------------------------------------------

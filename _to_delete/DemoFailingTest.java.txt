@@ -1,0 +1,69 @@
+package com.nearz.api;
+
+import org.testng.annotations.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+/**
+ * DEMO ONLY - what a FAILING run looks like. Delete after the demo.
+ *
+ * This walks exactly the same journey as API-E2E-001 - enquiry, convert, book,
+ * complete, bill, settle in cash - against the real API. Every request it makes
+ * is real and every one of them succeeds.
+ *
+ * The ONE thing that is wrong is the expected figure. It claims the salon
+ * should have taken 1,200 for a 1,000 service at 18% GST, when the correct
+ * answer is 1,180. So the journey passes and the ARITHMETIC CHECK fails, which
+ * is precisely the shape of a real revenue defect.
+ *
+ * WHY A SEPARATE CLASS instead of breaking API-E2E-001 for five minutes:
+ *   - no production test file is edited, so nothing can be left broken
+ *   - this class is NOT listed in testng.xml, so a normal `mvn test` will never
+ *     run it even if someone forgets to delete it
+ *   - cleanup is deleting one file, not remembering what was changed
+ *
+ * Run it on its own:
+ *   mvn test "-Dtest=DemoFailingTest" "-Dsurefire.suiteXmlFiles="
+ */
+public class DemoFailingTest extends BaseJourneyTest {
+
+    /** The correct answer is 1180.00. This is deliberately 20 rupees out. */
+    private static final BigDecimal WRONG_EXPECTED = new BigDecimal("1200.00");
+
+    @Test(description = "DEMO a settled bill, checked against a deliberately wrong expected figure")
+    public void demo_revenueDoesNotMatch() {
+        LocalDate day = Steps.today();
+
+        // ---- the journey, identical to API-E2E-001 -----------------------
+        var before = snapshot();
+
+        NewCustomer customer = arriveAsEnquiry("QA DEMO FAIL");
+        completeAppointmentFor(customer);
+        int billId = billFor(customer, 1, 0, ZERO);
+        Steps.settleInFull(billId, "cash");
+
+        var after = snapshot();
+        assertSameDay(day);
+
+        // ---- the record is fine, and this passes -------------------------
+        assertBillIsPaidBy(billId, customer);
+
+        // ---- and this is the line that fails -----------------------------
+        // Everything above worked. The bill is raised, paid and correct. The
+        // only thing wrong is what we told the test to expect.
+        //
+        // The failure message comes from Reports.describe() and reads:
+        //
+        //     sales.total_revenue
+        //         expected to move      1200.00
+        //         actually moved        1180.00   (74564.00 -> 75744.00)
+        //
+        // which is exactly what a real under-reporting defect would look like.
+        expectMoved(before, after, "sales.total_revenue", WRONG_EXPECTED);
+
+        // Never reached. Left here to show the test would have gone on to check
+        // the other fourteen figures.
+        expectSettled(before, after, 1, 0, ZERO);
+    }
+}

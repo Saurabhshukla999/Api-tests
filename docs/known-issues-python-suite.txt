@@ -1,0 +1,36 @@
+# Known issues — re-baselined 28 Aug 2026, after the suite was cut to
+# end-to-end journeys + tenant isolation (2,814 tests -> 336).
+#
+# Anything failing that is NOT listed here is NEW and worth reading.
+# Add the bug number after a '#'. Delete a line once the fix ships.
+# Regenerate with:  python tools/baseline.py --all
+#
+# 4 failing tests recorded. All four are one defect: D9.
+
+tests/test_contract_idor.py::test_salon_id_query_param_is_authorized[GET /salon_services]  # D9 — service list leak, highest priority
+tests/test_contract_idor.py::test_salon_id_query_param_is_authorized[GET /salon_services/categories]  # D9 — service list leak, highest priority
+tests/test_contract_idor.py::test_salon_id_query_param_is_authorized[GET /salon_services/export_all]  # D9 — service list leak, highest priority
+tests/test_contract_idor.py::test_salon_id_query_param_is_authorized[GET /salon_services/summary]  # D9 — service list leak, highest priority
+
+# Dropped from this baseline because the tests that produced them were deleted.
+# The DEFECTS are still open — they are written up in docs/RUN_RESULTS.md and
+# nothing now watches them nightly:
+#   D10  Sales revenue vs Payments collected disagree (~Rs 21,463/month, cause unknown)
+#   D11  Sales card counts 59 bills, the unfiltered table lists 80
+#   D1   unknown report key returns HTTP 200 with {"error":"not_found"}
+#   D3   blank attendance date silently becomes today
+
+# Blocks 1-3 (API-E2E-001..125) as of 28 Aug 2026: 75 journeys, 56 run, 56 pass,
+# 19 skipped by design - 17 need partial payments (off in the frontend), 015
+# needs the split-payment modes[] payload, 014 is covered by 119. Nothing here
+# is baselined, so ANY journey failure is new and worth reading.
+#
+# Three findings are locked as observed rather than baselined as failures. Each
+# is asserted at its current value with a comment naming the concern, so the
+# number cannot drift unnoticed while the backend team decides:
+#   A  staff_performance.total_service_revenue includes product sales
+#      (block1_cases.py, API-E2E-011)
+#   B  the Appointments report does not move until a bill exists
+#      (lib_journey.py, UNDER_INVESTIGATION)
+#   C  a fully refunded bill reverses revenue to zero but keeps its discount
+#      (block3_cases.py, API-E2E-117)

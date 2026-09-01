@@ -1,0 +1,8 @@
+target/
+.allure/
+allure-results/
+*.iml
+.idea/
+# Never commit real tokens
+src/test/resources/config.properties
+/bin/

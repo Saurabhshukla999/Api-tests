@@ -1,0 +1,64 @@
+package com.nearz.api;
+
+import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
+import org.testng.annotations.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static io.restassured.RestAssured.given;
+
+/**
+ * TEMPORARY. Delete once API-E2E-007/008/009 are written.
+ *
+ * Confirms what PATCH /appointments/{id} actually accepts before three tests
+ * are written on top of it.
+ */
+public class ProbeAppointmentUpdate extends BaseJourneyTest {
+
+    @Test
+    public void probe() {
+        NewCustomer customer = arriveAsEnquiry("QA PROBE");
+        int appointmentId = bookAppointmentFor(customer);
+
+        JsonPath shown = given().spec(Api.journey())
+                .pathParam("id", appointmentId)
+                .when().get("/appointments/{id}")
+                .then().extract().jsonPath();
+        System.out.println("\n=== GET /appointments/" + appointmentId + " ===");
+        System.out.println("salon_services: " + shown.get("data.salon_services"));
+
+        int lineId  = shown.getInt("data.salon_services[0].id");
+        int wasStaff = shown.getInt("data.salon_services[0].staff_id");
+        int newStaff = catalogue.staffIds.stream()
+                .filter(id -> id != wasStaff).findFirst().orElseThrow();
+
+        System.out.println("line " + lineId + " staff " + wasStaff + " -> " + newStaff);
+
+        Response staffChange = given().spec(Api.journey())
+                .pathParam("id", appointmentId)
+                .body(Map.of("appointment", Map.of(
+                        "appointment_services_attributes", List.of(Map.of(
+                                "id", lineId, "staff_id", newStaff)))))
+                .when().patch("/appointments/{id}");
+        System.out.println("\n=== PATCH staff_id -> " + staffChange.statusCode() + " ===");
+        System.out.println(staffChange.asString());
+
+        JsonPath after = given().spec(Api.journey())
+                .pathParam("id", appointmentId)
+                .when().get("/appointments/{id}")
+                .then().extract().jsonPath();
+        System.out.println("\n=== after: staff_id is now "
+                + after.get("data.salon_services[0].staff_id") + " ===");
+
+        Response nameChange = given().spec(Api.journey())
+                .pathParam("id", appointmentId)
+                .body(Map.of("appointment", Map.of(
+                        "on_behalf_of_username", "QA PROBE RENAMED")))
+                .when().patch("/appointments/{id}");
+        System.out.println("\n=== PATCH on_behalf_of_username -> "
+                + nameChange.statusCode() + " ===");
+        System.out.println(nameChange.asString());
+    }
+}

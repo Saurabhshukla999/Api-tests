@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.nearz</groupId>
+  <artifactId>nearz-api-tests</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <name>Nearz API end-to-end journey tests</name>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <rest-assured.version>5.5.0</rest-assured.version>
+    <testng.version>7.10.2</testng.version>
+    <allure.version>2.29.0</allure.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <version>${rest-assured.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>json-path</artifactId>
+      <version>${rest-assured.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testng</groupId>
+      <artifactId>testng</artifactId>
+      <version>${testng.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest</artifactId>
+      <version>2.2</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- REST Assured needs a JSON serializer on the classpath to turn a Map
+         into a request body. Without it every POST fails with "no JSON
+         serializer found in classpath" before it reaches the network. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.2</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Allure: the HTML report. allure-testng picks up every @Test and its
+         description automatically; allure-rest-assured attaches the full
+         request and response of every call to the failing test, which is the
+         only thing you actually want at 9am when the nightly run went red. -->
+    <dependency>
+      <groupId>io.qameta.allure</groupId>
+      <artifactId>allure-testng</artifactId>
+      <version>${allure.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.qameta.allure</groupId>
+      <artifactId>allure-rest-assured</artifactId>
+      <version>${allure.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <suiteXmlFiles>
+            <suiteXmlFile>testng.xml</suiteXmlFile>
+          </suiteXmlFiles>
+          <!-- Journeys assert exact report deltas. Two running at once against
+               the same salon would each see the other's money, so every delta
+               would be wrong. Keep this at 1 thread. -->
+          <threadCount>1</threadCount>
+          <!-- Where Allure drops its raw results, read later by allure:report -->
+          <systemPropertyVariables>
+            <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+          </systemPropertyVariables>
+          <!-- A red suite is a report to read, not a build to abort. The exit
+               code still reflects failures for CI. -->
+          <testFailureIgnore>false</testFailureIgnore>
+        </configuration>
+      </plugin>
+
+      <!-- mvn allure:report  ->  target/site/allure-maven-plugin/index.html -->
+      <plugin>
+        <groupId>io.qameta.allure</groupId>
+        <artifactId>allure-maven</artifactId>
+        <version>2.12.0</version>
+        <configuration>
+          <reportVersion>${allure.version}</reportVersion>
+          <resultsDirectory>${project.build.directory}/allure-results</resultsDirectory>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
