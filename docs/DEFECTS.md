@@ -46,6 +46,26 @@ bill of one ₹1,000 service plus one ₹200 product moves
 the ₹1,180 service portion. A stylist who sells shampoo is credited with
 service revenue for it.
 
+**Finding E — the Profit report is not the taxable amount, and the suite was
+wrong about it for a hundred tests.** Not a defect: recorded because it took two
+corrections to the test model and the reasoning is worth keeping.
+
+Measured on salon 4550, 4 Sep 2026, while building Block 5:
+
+| basket | expected (old model) | actual | why |
+|---|---|---|---|
+| service + product | `net_profit` +1200 | **+1100** | Net Profit deducts **cost of goods sold** — a ₹200 shampoo bought for ₹100 adds 200 to revenue but only 100 to profit |
+| service + product + 10% | `gross_revenue` +1080.00 | **+1079.60** | Gross Revenue is `net_payable − tax`. The bill rounds 1,274.40 down to 1,274, so the salon keeps 40p less revenue than the pre-round taxable figure suggests |
+
+Both were invisible until a basket carried **a product and a discount at once**:
+a service-only basket has no cost of sale, and a whole-rupee basket has no
+round-off. `expectSettled` now models both, and Block 1 still passes unchanged.
+
+Worth noting for anyone reading the Rails source: `ProfitQuery` in the repo
+computes `gross_revenue = bills.sum(:net_payable)` — tax included — which is
+**not** what the deployed API returns. The repo checkout and the QA deployment
+are not the same version. Trust the measurement.
+
 **D18 — a bill raised through the billing module is never linked to its
 appointment, so every booked customer is reported as a walk-in.**
 `bills.appointment_id` exists as a column and two reports depend on it:

@@ -336,6 +336,122 @@ public final class Steps {
                 .extract().jsonPath().getInt("data.id");
     }
 
+    // -----------------------------------------------------------------------
+    // Block 5 needs every knob the billing API has, so here they all are.
+    // Confirmed against the live API 4 Sep 2026:
+    //     discount: {pct, flat}     both apply, and they ADD
+    //     tax:      {gst_enabled, mode}   mode is "exclusive" or "inclusive"
+    // -----------------------------------------------------------------------
+    /**
+     * The full bill builder. Every other createBill above delegates here.
+     *
+     * discountFlat  a rupee amount off the whole bill, on top of any pct
+     * taxMode       "inclusive" makes the listed price the FINAL price and
+     *               backs the tax out of it; "exclusive" adds tax on top.
+     *               null leaves the salon default (exclusive on 4550).
+     * extraServiceId / extraPrice  one line for a service that is not the
+     *               catalogue's own - used when billing QA Blow Dry.
+     */
+    public static int createBillFully(int customerId, Catalogue catalogue,
+                                      int serviceLines, int productLines, int staffId,
+                                      BigDecimal discountPct, BigDecimal discountFlat,
+                                      Boolean gstEnabled, String taxMode,
+                                      Integer extraServiceId, BigDecimal extraPrice) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        if (extraServiceId != null) {
+            items.add(Map.of("type", "service", "ref_id", extraServiceId, "qty", 1,
+                             "unit_price", extraPrice, "staff_id", staffId));
+        }
+        for (int i = 0; i < serviceLines; i++) {
+            items.add(Map.of("type", "service", "ref_id", catalogue.serviceId, "qty", 1,
+                             "unit_price", catalogue.servicePrice, "staff_id", staffId));
+        }
+        for (int i = 0; i < productLines; i++) {
+            items.add(Map.of("type", "product", "ref_id", catalogue.productId, "qty", 1,
+                             "unit_price", catalogue.productPrice, "staff_id", staffId));
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customer_id", customerId);
+        body.put("status", "draft");
+        body.put("items", items);
+        if (discountPct.signum() > 0 || discountFlat.signum() > 0) {
+            body.put("discount", Map.of("pct", discountPct, "flat", discountFlat));
+        }
+        if (gstEnabled != null || taxMode != null) {
+            Map<String, Object> tax = new LinkedHashMap<>();
+            if (gstEnabled != null) { tax.put("gst_enabled", gstEnabled); }
+            if (taxMode != null)    { tax.put("mode", taxMode); }
+            body.put("tax", tax);
+        }
+
+        return given().spec(Api.journey())
+                .body(body)
+                .when().post("/api/v1/billing/bills")
+                .then().statusCode(201)
+                .extract().jsonPath().getInt("data.id");
+    }
+
+    /**
+     * Replace the basket on a DRAFT bill. PUT /bills/{id}.
+     *
+     * The bill is re-priced from scratch by TotalsCalculator, so this is how
+     * API-E2E-072 proves the reports use the FINAL basket and not the one the
+     * bill was created with.
+     */
+    public static void updateBillItems(int billId, Catalogue catalogue,
+                                       int serviceLines, int productLines, int staffId) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int i = 0; i < serviceLines; i++) {
+            items.add(Map.of("type", "service", "ref_id", catalogue.serviceId, "qty", 1,
+                             "unit_price", catalogue.servicePrice, "staff_id", staffId));
+        }
+        for (int i = 0; i < productLines; i++) {
+            items.add(Map.of("type", "product", "ref_id", catalogue.productId, "qty", 1,
+                             "unit_price", catalogue.productPrice, "staff_id", staffId));
+        }
+        given().spec(Api.journey())
+                .pathParam("id", billId)
+                .body(Map.of("items", items))
+                .when().put("/api/v1/billing/bills/{id}")
+                .then().statusCode(200);
+    }
+
+    /** Try to settle with an amount that may be wrong. Returns the status code. */
+    public static int attemptFinalize(int billId, BigDecimal amount, String mode) {
+        return given().spec(Api.journey())
+                .pathParam("id", billId)
+                .body(Map.of("payment", Map.of("mode", mode, "amount_paid", amount)))
+                .when().post("/api/v1/billing/bills/{id}/finalize")
+                .then().extract().statusCode();
+    }
+
+    /** The salon's billing settings. round_off_enabled lives at
+     *  data.setting.round_off_enabled. */
+    public static JsonPath readSalonSetting(String salonId) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .when().get("/salons/{salonId}/settings")
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    /**
+     * Flip the salon-wide round-off switch. Returns the status code.
+     *
+     * SALON-WIDE. There is no per-bill override - TotalsCalculator reads
+     * bill.salon.salon_setting.round_off_enabled directly - so any test that
+     * touches this MUST restore it in a finally block or every later journey
+     * in the run computes the wrong expected total.
+     */
+    public static int setRoundOff(String salonId, boolean enabled) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .body(Map.of("setting", Map.of("round_off_enabled", enabled)))
+                .when().patch("/salons/{salonId}/settings")
+                .then().extract().statusCode();
+    }
+
     /** What the API says this bill comes to. Read back so we can compare it. */
     public static BigDecimal netPayable(int billId) {
         return Money.of(readBill(billId).getDouble("data.net_payable"));

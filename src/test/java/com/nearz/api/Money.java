@@ -73,6 +73,30 @@ public final class Money {
                 : gross;
     }
 
+    // -----------------------------------------------------------------------
+    // INCLUSIVE tax. The other direction entirely, and easy to get backwards.
+    //
+    //   EXCLUSIVE  the listed price is pre-tax.  1,000 -> customer pays 1,180
+    //   INCLUSIVE  the listed price IS the price. 1,000 -> customer pays 1,000
+    //              and 152.54 of it was tax all along
+    //
+    // TotalsCalculator backs the tax out with
+    //     taxable - (taxable / (1 + multiplier))
+    // and then gross_payable is the listed price unchanged. Verified against
+    // the live API on 4 Sep 2026: a 1,000 service at 18% inclusive returned
+    // net_payable 1000.00, taxable 847.46, tax 152.54.
+    // -----------------------------------------------------------------------
+
+    /** The tax hidden inside a tax-inclusive price. */
+    public static BigDecimal taxWithin(BigDecimal inclusivePrice, BigDecimal rate) {
+        return round(inclusivePrice.subtract(baseWithin(inclusivePrice, rate)));
+    }
+
+    /** The pre-tax base hidden inside a tax-inclusive price. */
+    public static BigDecimal baseWithin(BigDecimal inclusivePrice, BigDecimal rate) {
+        return inclusivePrice.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
+    }
+
     /** A cart discount can empty a bill but never invert it. */
     public static BigDecimal discount(BigDecimal subtotal, BigDecimal pct, BigDecimal flat) {
         BigDecimal raw = subtotal.multiply(pct).divide(new BigDecimal("100"))

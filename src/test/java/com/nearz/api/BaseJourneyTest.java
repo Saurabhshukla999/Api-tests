@@ -160,8 +160,30 @@ public abstract class BaseJourneyTest {
         expectMoved(before, after, "payments.payments_count", ONE);
         expectMoved(before, after, "customers.new_customers", ONE);
         expectMoved(before, after, "customers.total_spend_in_range", gross);
-        expectMoved(before, after, "profit.gross_revenue", taxable);
-        expectMoved(before, after, "profit.net_profit", taxable);
+        // ---------------------------------------------------------------
+        // The Profit report, which is NOT simply the taxable amount.
+        // Both of these were wrong until 4 Sep 2026 and were caught by the
+        // first Block 5 baskets that carried a product and a discount at once.
+        //
+        // GROSS REVENUE is what the salon actually RECEIVED, less the tax it
+        // is holding for the government - so it is net_payable minus tax, not
+        // the pre-round taxable figure. On a whole-rupee basket the two are
+        // identical, which is why this hid for so long. On the compound
+        // basket they differ by the round-off:
+        //     taxable 1080.00, tax 194.40, settled 1274 (from 1274.40)
+        //     gross_revenue = 1274 - 194.40 = 1079.60,  NOT 1080.00
+        //
+        // NET PROFIT then deducts COST OF GOODS SOLD. A 200-rupee shampoo the
+        // salon bought for 100 adds 200 to revenue but only 100 to profit.
+        // Services have no cost of sale, so a service-only basket has
+        // net_profit == gross_revenue and this too stayed invisible.
+        // ---------------------------------------------------------------
+        BigDecimal grossRevenue = Money.round(gross.subtract(tax));
+        BigDecimal cogs = catalogue.productCost.multiply(BigDecimal.valueOf(products));
+
+        expectMoved(before, after, "profit.gross_revenue", grossRevenue);
+        expectMoved(before, after, "profit.net_profit",
+                    Money.round(grossRevenue.subtract(cogs)));
         expectMoved(before, after, "profit.tax_collected", tax);
         expectMoved(before, after, "profit.total_discount", discount);
         expectMoved(before, after, "staff_performance.total_service_revenue", gross);

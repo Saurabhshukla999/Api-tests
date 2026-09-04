@@ -49,6 +49,9 @@ public final class Catalogue {
     private static final String PRODUCT_NAME = "QA Shampoo";
     private static final int SERVICE_PRICE = 1000;
     private static final int PRODUCT_PRICE = 200;
+    /** What the salon PAID for the product. Net Profit deducts this as cost of
+     *  goods sold, so the suite has to know it to predict that figure. */
+    private static final int PRODUCT_COST = 100;
 
     /** A second service, so API-E2E-008 has something to swap TO. Priced
      *  differently from QA Haircut on purpose - a swap that changed nothing
@@ -62,6 +65,8 @@ public final class Catalogue {
     public final BigDecimal servicePrice;
     public final int productId;
     public final BigDecimal productPrice;
+    /** Cost of goods sold, per product unit. See PRODUCT_COST. */
+    public final BigDecimal productCost = new BigDecimal(PRODUCT_COST);
     public final List<Integer> staffIds;
     public final BigDecimal gstRate;      // fraction: 0.18 for 18%
     public final boolean roundOffEnabled; // bills settle in whole rupees

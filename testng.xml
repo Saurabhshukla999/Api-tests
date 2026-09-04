@@ -26,6 +26,10 @@
     <classes><class name="com.nearz.api.Block4AppointmentTest"/></classes>
   </test>
 
+  <test name="Block 5 - bill construction (API-E2E-051..075)">
+    <classes><class name="com.nearz.api.Block5BillTest"/></classes>
+  </test>
+
   <test name="Block 2 - payments and settlement (API-E2E-076..100)">
     <classes><class name="com.nearz.api.Block2PaymentTest"/></classes>
   </test>
