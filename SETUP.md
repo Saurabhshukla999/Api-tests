@@ -21,6 +21,30 @@ from the `java` command. No Maven wrapper is checked in. Maven downloads REST
 Assured, TestNG, Hamcrest, Jackson and Allure from the versions in `pom.xml`;
 do not install them separately. The first build needs access to Maven repositories.
 
+### This Mac: installed toolchain
+
+Installed and checksum-verified on 7 Sep 2026 from the official
+[Temurin Java 17 distribution](https://adoptium.net/temurin/releases/?version=17)
+and [Apache Maven downloads](https://maven.apache.org/download.cgi):
+
+- Java: Temurin **17.0.20.1+1**, Intel macOS.
+- Maven: **3.9.16**.
+- Installation directory: `~/.local/share/nearz-toolchain/`.
+- `~/.zshrc` sets `JAVA_HOME` and prepends both tool `bin` directories to PATH.
+- Original shell configuration backup: `~/.zshrc.before-nearz-java17`.
+
+Open a new terminal, then run `java -version` and `mvn -v`. Existing terminals
+can load just these settings without restarting:
+
+```sh
+export JAVA_HOME="$HOME/.local/share/nearz-toolchain/jdk-17.0.20.1+1/Contents/Home"
+export PATH="$JAVA_HOME/bin:$HOME/.local/share/nearz-toolchain/apache-maven-3.9.16/bin:$PATH"
+```
+
+The older Java installations remain installed. These are user-local binaries;
+Homebrew does not manage their updates. To switch later, change the two Nearz
+exports at the end of `.zshrc` to the new installation paths.
+
 ## 2. Compile before configuring credentials
 
 ```sh
