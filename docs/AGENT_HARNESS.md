@@ -86,3 +86,6 @@ In a fresh agent session, ask it to explain the first steps for:
   state before retrying a mutation, and retain known-defect assertions.
 
 These are manual behavior checks, not a claim that agent behavior is guaranteed.
+
+Build references: [Maven compiler release support](https://maven.apache.org/plugins/maven-compiler-plugin/examples/set-compiler-release.html)
+and [GitHub setup-java](https://github.com/actions/setup-java).

@@ -168,7 +168,7 @@ split-payment `modes[]` payload. Each is fully written; turning one on is
 deleting its `SkipException`.
 
 The 2 deliberate failures live in the `known-defect` group, excluded from the
-normal run and visible on demand with `mvn test -Dgroups=known-defect`:
+normal run and visible on demand with `mvn test "-Dtest=Block*Test" "-Dgroups=known-defect"`:
 
 | | what it asserts | why it fails |
 |---|---|---|
