@@ -30,6 +30,26 @@
     <classes><class name="com.nearz.api.Block5BillTest"/></classes>
   </test>
 
+  <test name="Block 6 - staff, attendance and commission (API-E2E-126..150)">
+    <classes><class name="com.nearz.api.Block6StaffTest"/></classes>
+  </test>
+
+  <test name="Block 7 - products and inventory (API-E2E-151..170)">
+    <classes><class name="com.nearz.api.Block7InventoryTest"/></classes>
+  </test>
+
+  <test name="Block 8 - expenses and profit (API-E2E-171..180)">
+    <classes><class name="com.nearz.api.Block8ExpenseTest"/></classes>
+  </test>
+
+  <test name="Block 9 - dashboard reconciliation (API-E2E-181..185)">
+    <classes><class name="com.nearz.api.Block9DashboardTest"/></classes>
+  </test>
+
+  <test name="Block 10 - composite mega-journeys (API-E2E-186..200)">
+    <classes><class name="com.nearz.api.Block10CompositeTest"/></classes>
+  </test>
+
   <test name="Block 2 - payments and settlement (API-E2E-076..100)">
     <classes><class name="com.nearz.api.Block2PaymentTest"/></classes>
   </test>

@@ -34,10 +34,16 @@ public final class Reports {
     public static final String STAFF     = "staff_performance";
     public static final String PROFIT    = "profit";
     public static final String APPOINTMENTS = "appointments";
+    public static final String EXPENSES  = "expenses";
 
     /** The reports an enquiry-to-payment journey can move. */
     public static final List<String> MONEY_TRAIL =
         List.of(SALES, PAYMENTS, CUSTOMERS, SERVICES, STAFF, PROFIT);
+
+    /** Profit and its cost side, for the expense journeys. Two reads, not six -
+     *  an expense cannot move Sales, Payments, Services or Staff, and reading
+     *  them would cost four HTTP calls to prove nothing. */
+    public static final List<String> COST_TRAIL = List.of(PROFIT, EXPENSES);
 
     /**
      * The money trail plus the Appointments report.
@@ -61,8 +67,21 @@ public final class Reports {
         CUSTOMERS, List.of("new_customers", "total_spend_in_range"),
         SERVICES,  List.of("total_revenue", "services_sold"),
         STAFF,     List.of("total_service_revenue"),
+        // Reports::ProfitQuery#summary. The cost side was added for Block 8:
+        //   operating_expenses  sum of DEBIT expense rows dated in the range.
+        //                       Measured 7 Sep 2026: CREDIT rows are excluded,
+        //                       which matters because the app auto-writes a
+        //                       CREDIT row of the service price every time an
+        //                       appointment completes - salon 4550 carries
+        //                       160,000 of them and none of it is an expense.
+        //   service_cogs        qty x the cost snapshotted on the bill line
+        //   total_cost          operating_expenses + service_cogs
+        //   net_profit          gross_revenue - total_cost
         PROFIT,    List.of("gross_revenue", "net_profit", "tax_collected",
-                           "total_discount"),
+                           "total_discount", "operating_expenses",
+                           "service_cogs", "total_cost"),
+        EXPENSES,  List.of("total_expenses", "expense_count",
+                           "avg_daily_expense", "pending_amount"),
         // Reports::AppointmentsQuery#kpis. Worth knowing what each counts:
         //   total_appointments  every appointment dated in the range
         //   completed / no_show by status

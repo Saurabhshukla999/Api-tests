@@ -149,14 +149,35 @@ in those words, with the before and after values.
 | `Steps.java` | One method per business action, each returning the next id |
 | `BaseJourneyTest.java` | Shared setup and the three layers of assertion |
 | `Block1EnquiryTest.java` | API-E2E-001..025 — enquiry to a settled bill |
+| `Block4AppointmentTest.java` | API-E2E-026..050 — appointment lifecycle |
+| `Block5BillTest.java` | API-E2E-051..075 — bill construction |
 | `Block2PaymentTest.java` | API-E2E-076..100 — payments and settlement |
 | `Block3RefundTest.java` | API-E2E-101..125 — refunds and reversal |
+| `Block6StaffTest.java` | API-E2E-126..150 — staff, attendance, commission |
+| `Block7InventoryTest.java` | API-E2E-151..170 — products and inventory |
+| `Block8ExpenseTest.java` | API-E2E-171..180 — expenses and profit |
+| `Block9DashboardTest.java` | API-E2E-181..185 — dashboard vs the reports |
+| `Block10CompositeTest.java` | API-E2E-186..200 — composite mega-journeys |
 | `ProductCrudTest.java` | Plain CRUD on products — the shape to read first |
+| `VerifyDefectsTest.java` | On-demand defect audit. Prints a verdict, does not assert |
 
-**75 tests: 56 run and pass, 19 skipped by design.** The skipped ones need
-partial payments (switched off in the frontend) or the split-payment `modes[]`
-payload. Each is fully written; turning one on is deleting its
-`SkipException`.
+**All 200 journeys are built.** 174 run and pass, 21 are skipped by design, 2
+fail deliberately, and 3 were removed as duplicates of journeys already covered.
+
+The 21 skipped need partial payments (switched off in the frontend) or the
+split-payment `modes[]` payload. Each is fully written; turning one on is
+deleting its `SkipException`.
+
+The 2 deliberate failures live in the `known-defect` group, excluded from the
+normal run and visible on demand with `mvn test -Dgroups=known-defect`:
+
+| | what it asserts | why it fails |
+|---|---|---|
+| `e2e049` | a bill carries the id of the appointment it came from | **D18** — the billing module cannot link one, so booked customers count as walk-ins |
+| `e2e168` | a full refund reverses the product's cost, not just its revenue | **D19** — the stock comes back, the cost stays booked |
+
+Plus `d16_swappedServiceKeepsOldPrice`, a 26th test in Block 1 that is not one
+of the 200 — it pins **D16** on its own.
 
 ---
 
@@ -176,6 +197,30 @@ there was no data left to leak.
 ---
 
 ## Why the suite runs single-threaded
+
+### Appointment slots are a budget per DAY
+
+`SLOTS x ROSTER` in `Catalogue.java` — 19 x 20 = **380 bookings a day**, and an
+appointment booked at 11am still occupies its slot at 6pm. It is a per-day
+budget, not a per-run one.
+
+A full 200-journey run needs roughly **250 slots**, because some journeys book
+more than one appointment (`e2e198` books ten, `e2e195` five). So run the full
+suite *first* on a fresh day, before any single-block runs — or raise `ROSTER`,
+where each extra stylist buys 19 more slots and `Catalogue` seeds any missing
+`QA Stylist N` on the next run.
+
+When the budget runs out every remaining journey fails with the same message,
+which says so plainly:
+
+```
+today's calendar is full: all 380 places (19 slots x 20 stylists) are taken
+on 2026-09-07. Appointments live for the whole day, so this is a limit per
+DAY, not per run. Raise ROSTER in Catalogue.java, or wait for tomorrow.
+```
+
+That is a capacity failure, not a defect. It is worth telling apart from a real
+one at a glance, which is why the message names the arithmetic.
 
 Every journey asserts an *exact* report delta. Two journeys running at once
 against the same salon each see the other's money in their "after" snapshot, so

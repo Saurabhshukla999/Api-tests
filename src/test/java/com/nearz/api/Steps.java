@@ -452,6 +452,222 @@ public final class Steps {
                 .then().extract().statusCode();
     }
 
+    // -----------------------------------------------------------------------
+    // Staff, attendance and commission - what Block 6 runs on.
+    // Confirmed against the live API 7 Sep 2026.
+    // -----------------------------------------------------------------------
+    /**
+     * Hire a stylist with a commission arrangement.
+     *
+     * commissionType is one of none / percentage / flat (Staff's own enum).
+     * commissionValue is the percent or the rupee amount; null for "none".
+     */
+    public static int createStaff(String salonId, String name, String commissionType,
+                                  Object commissionValue, List<Integer> serviceIds) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        body.put("phone", newPhone());
+        body.put("job_title", "Beautician");
+        body.put("shift_start", "09:00");
+        body.put("shift_end", "21:00");
+        body.put("commission_type", commissionType);
+        if (commissionValue != null) {
+            body.put("commission_value", commissionValue);
+        }
+        body.put("salon_service_ids", serviceIds);
+
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId).body(body)
+                .when().post("/salons/{salonId}/staff")
+                .then().statusCode(201)
+                .extract().jsonPath().getInt("data.id");
+    }
+
+    /**
+     * A bill from raw line maps, so a caller can put a DIFFERENT staff_id on
+     * each line. Every other createBill puts one stylist on the whole basket,
+     * which cannot express "the cut was Priya, the blow-dry was Sam".
+     */
+    public static int createBillLines(int customerId, List<Map<String, Object>> lines) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customer_id", customerId);
+        body.put("status", "draft");
+        body.put("items", lines);
+        return given().spec(Api.journey())
+                .body(body)
+                .when().post("/api/v1/billing/bills")
+                .then().statusCode(201)
+                .extract().jsonPath().getInt("data.id");
+    }
+
+    // -----------------------------------------------------------------------
+    // Inventory - what Block 7 runs on. Confirmed 7 Sep 2026.
+    // -----------------------------------------------------------------------
+    /** Stock a new product. Returns its id. */
+    public static int createProduct(String salonId, String name, int costPrice,
+                                    int sellingPrice, int openingStock, int reorderLevel) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .body(Map.ofEntries(
+                        Map.entry("name", name),
+                        Map.entry("brand", "QA Brand"),
+                        Map.entry("category", "Haircare"),
+                        Map.entry("unit", "pcs"),
+                        Map.entry("cost_price", costPrice),
+                        Map.entry("selling_price", sellingPrice),
+                        Map.entry("opening_stock", openingStock),
+                        Map.entry("reorder_level", reorderLevel)))
+                .when().post("/salons/{salonId}/products")
+                .then().statusCode(201)
+                .extract().jsonPath().getInt("data.id");
+    }
+
+    /**
+     * One product's row from the LIST.
+     *
+     * Deliberately not GET /salons/{id}/products/{id} - that answers HTTP 200
+     * with a body of {"error":"not_found"} even for a product that exists
+     * (defect D1), so a test reading it would silently see nothing and call it
+     * a stock of zero.
+     *
+     * The row carries: stock_qty, reorder_level, stock_state, cost_price,
+     * selling_price - all as STRINGS ("8.0"), not numbers.
+     */
+    public static Map<String, Object> productRow(String salonId, int productId) {
+        for (int page = 1; page <= 20; page++) {
+            List<Map<String, Object>> items = given().spec(Api.journey())
+                    .pathParam("salonId", salonId)
+                    .queryParam("page", page).queryParam("per_page", 100)
+                    .when().get("/salons/{salonId}/products")
+                    .then().statusCode(200)
+                    .extract().jsonPath().getList("data.items");
+            if (items == null || items.isEmpty()) {
+                break;
+            }
+            for (Map<String, Object> item : items) {
+                if (String.valueOf(item.get("id")).equals(String.valueOf(productId))) {
+                    return item;
+                }
+            }
+        }
+        throw new AssertionError("product " + productId + " is not in salon "
+                + salonId + "'s product list at all");
+    }
+
+    /** How many units the salon believes it holds. */
+    public static BigDecimal stockOf(String salonId, int productId) {
+        return new BigDecimal(String.valueOf(productRow(salonId, productId).get("stock_qty")));
+    }
+
+    /** in_stock / low_stock / out_of_stock, as the API labels it. */
+    public static String stockState(String salonId, int productId) {
+        return String.valueOf(productRow(salonId, productId).get("stock_state"));
+    }
+
+    /** The salon dashboard, which summarises what the reports say separately. */
+    public static JsonPath dashboard(String salonId, String range) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("range", range)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/dashboard/overview")
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    /** active / on_leave / inactive. Returns the status code. */
+    public static int setStaffStatus(String salonId, int staffId, String status) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId).pathParam("id", staffId)
+                .body(Map.of("status", status))
+                .when().put("/salons/{salonId}/staff/{id}")
+                .then().extract().statusCode();
+    }
+
+    /**
+     * Mark a day's attendance. PUT on the collection, keyed by (employee, date)
+     * in the BODY rather than by id, so a repeated save corrects rather than
+     * duplicates - the endpoint is deliberately idempotent.
+     *
+     * Measured: "absent" is accepted on its own, but present / late / half_day
+     * are refused with "check_in is required". Pass the times for those.
+     * Returns the status code so a test can assert a refusal too.
+     */
+    public static int markAttendance(String salonId, int staffId, LocalDate date,
+                                     String status, String checkIn, String checkOut) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("employee_id", staffId);
+        entry.put("date", date.toString());
+        entry.put("status", status);
+        if (checkIn != null)  { entry.put("check_in", checkIn); }
+        if (checkOut != null) { entry.put("check_out", checkOut); }
+
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .body(Map.of("attendance", entry))
+                .when().put("/salons/{salonId}/attendance/entries")
+                .then().extract().statusCode();
+    }
+
+    /** Today's attendance board: data.summary counts plus a roster row each. */
+    public static JsonPath attendanceDaily(String salonId, LocalDate date) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("date", date.toString())
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/attendance/daily")
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    public static JsonPath attendanceSummary(String salonId, String range) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("range", range)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/attendance/summary")
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    /**
+     * One stylist's row in the Staff Performance report.
+     *
+     * The ROWS endpoint, not the summary - the summary is a salon-wide total
+     * that cannot tell one stylist from another. Note the payload nests the
+     * page inside data, so the rows are at data.data; reading data[] instead
+     * finds nothing and every figure silently looks like zero.
+     *
+     * Fields on a row: total_appointments, completed_appointments,
+     * services_count, service_revenue, product_revenue, total_revenue,
+     * commission_base, commission_amount, average_bill_value, average_rating.
+     */
+    public static Map<String, Object> staffRow(String salonId, int staffId) {
+        JsonPath rows = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("range", "today").queryParam("limit", 200)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/reports/staff_performance/rows")
+                .then().statusCode(200).extract().jsonPath();
+
+        List<Map<String, Object>> list = rows.getList("data.data");
+        if (list == null) { list = rows.getList("data"); }
+        if (list != null) {
+            for (Map<String, Object> row : list) {
+                if (String.valueOf(row.get("staff_id")).equals(String.valueOf(staffId))) {
+                    return row;
+                }
+            }
+        }
+        return Map.of();
+    }
+
+    /** One figure off a stylist's row, as money. Missing row or field is zero. */
+    public static BigDecimal staffFigure(String salonId, int staffId, String field) {
+        Object v = staffRow(salonId, staffId).get(field);
+        return v == null ? BigDecimal.ZERO : new BigDecimal(v.toString());
+    }
+
     /** What the API says this bill comes to. Read back so we can compare it. */
     public static BigDecimal netPayable(int billId) {
         return Money.of(readBill(billId).getDouble("data.net_payable"));
@@ -537,5 +753,218 @@ public final class Steps {
 
     public static LocalTime now() {
         return LocalTime.now();
+    }
+
+    // =====================================================================
+    //  EXPENSES  (Block 8)
+    // =====================================================================
+    //
+    // Not salon-scoped. `POST /salons/{id}/expenses` answers 404 - the write
+    // route is the top-level `resources :expenses`, and the salon comes from
+    // the TOKEN, not the path:
+    //
+    //     ExpensesController#get_salon
+    //         @salon = Salon.find_by_user_id(@current_user.id)
+    //
+    // which is why these helpers take no salon id. The journey token belongs to
+    // salon 4550's owner, so every expense written here lands on 4550.
+    //
+    // Two shapes are accepted - a flat body and one nested under "expense".
+    // Flat is used here; Rails wrap_parameters folds it into the nested form
+    // the controller's `params.require(:expense)` wants.
+    //
+    // expense_type is Credit or Debit, and it is NOT a category:
+    //   Debit    a real cost. Counts toward Operating Expenses.
+    //   Credit   income. Does NOT count. The application auto-writes one of
+    //            these for the service price every time an appointment
+    //            completes, so salon 4550 carries thousands of them.
+
+    /** A DEBIT expense dated `date`. Returns its id. */
+    public static int createExpense(String name, BigDecimal amount, LocalDate date) {
+        return createExpense(name, "Debit", amount, date, null);
+    }
+
+    public static int createExpense(String name, String expenseType, BigDecimal amount,
+                                    LocalDate date, String description) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        body.put("expense_type", expenseType);
+        body.put("amount", amount);
+        body.put("date", date.toString());
+        if (description != null) {
+            body.put("description", description);
+        }
+        return given().spec(Api.journey())
+                .body(body)
+                .when().post("/expenses")
+                .then().statusCode(200)
+                .extract().jsonPath().getInt("data.expense.id");
+    }
+
+    /** Read an expense back off the salon's ledger. Null if it is not there. */
+    public static Map<String, Object> expenseRow(String salonId, int expenseId) {
+        List<Map<String, Object>> rows = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .when().get("/salons/{salonId}/expenses")
+                .then().statusCode(200)
+                .extract().jsonPath().getList("data.expenses");
+        for (Map<String, Object> row : rows) {
+            if (row.get("id") != null
+                    && Integer.parseInt(row.get("id").toString()) == expenseId) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /** The ledger's own two totals, as the salon list returns them. */
+    public static BigDecimal expenseLedgerTotal(String salonId, String which) {
+        Object value = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .when().get("/salons/{salonId}/expenses")
+                .then().statusCode(200)
+                .extract().jsonPath().get("data." + which);
+        return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
+    }
+
+    /** PUT replaces the whole record, so every field is resent. */
+    public static void updateExpense(int expenseId, String name, String expenseType,
+                                     BigDecimal amount, LocalDate date) {
+        given().spec(Api.journey())
+                .pathParam("id", expenseId)
+                .body(Map.of("name", name, "expense_type", expenseType,
+                             "amount", amount, "date", date.toString()))
+                .when().put("/expenses/{id}")
+                .then().statusCode(200);
+    }
+
+    public static void deleteExpense(int expenseId) {
+        given().spec(Api.journey())
+                .pathParam("id", expenseId)
+                .when().delete("/expenses/{id}")
+                .then().statusCode(200);
+    }
+
+    /** The dashboard's own expense panel - a different query from the report. */
+    public static JsonPath dashboardExpenses(String salonId, String range) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("range", range)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/dashboard/expenses")
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    // =====================================================================
+    //  DASHBOARD TABS  (Block 9)
+    // =====================================================================
+    //
+    // The dashboard is not one endpoint. `/dashboard` alone answers nothing;
+    // each tab is its own route under `/salons/{id}/dashboard/`:
+    //
+    //     overview  attendance  employees  packages  expenses
+    //     inventory analytics   reminders  insights  meta
+    //     action_center/low_stock, /membership_renewals, /complaints
+    //
+    // and each one is a SEPARATE query over the same data as the reports. That
+    // is the whole reason Block 9 exists: two queries that should agree can
+    // drift, and the dashboard is the surface the owner actually looks at.
+    //
+    // The overview announces its own basis in `data.revenue_basis`, which reads
+    // `gross_incl_tax_net_of_refunds` - tax included, refunds already taken off.
+    // That is the same basis as sales.total_revenue, which is why the two are
+    // asserted equal rather than merely proportional.
+
+    public static JsonPath dashboardTab(String salonId, String tab, String range) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("range", range)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/dashboard/" + tab)
+                .then().statusCode(200)
+                .extract().jsonPath();
+    }
+
+    /**
+     * One entry out of the overview's revenue_sources array, by key:
+     * services, products, memberships, combo_packs.
+     *
+     * Read by KEY rather than by position - the array order is not promised,
+     * and a test that indexed [0] would silently start asserting about
+     * memberships the day the order changed.
+     */
+    public static BigDecimal revenueSource(JsonPath overview, String key) {
+        List<Map<String, Object>> sources = overview.getList("data.revenue_sources");
+        if (sources == null) {
+            return BigDecimal.ZERO;
+        }
+        for (Map<String, Object> source : sources) {
+            if (key.equals(source.get("key"))) {
+                Object value = source.get("value");
+                return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    /** Is this product on the dashboard's low-stock list, and how badly? */
+    public static String lowStockSeverity(JsonPath inventory, int productId) {
+        List<Map<String, Object>> rows = inventory.getList("data.low_stock");
+        if (rows == null) {
+            return null;
+        }
+        for (Map<String, Object> row : rows) {
+            Object id = row.get("product_id");
+            if (id != null && Integer.parseInt(id.toString()) == productId) {
+                return String.valueOf(row.get("severity"));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The overview's payment_summary, totalled across every mode.
+     *
+     * Two shapes in the wild: an ARRAY of {key,label,amount,pct} when the day
+     * has more than one payment mode, and a bare object when it has exactly
+     * one. Both are handled here rather than in the test, because a block that
+     * happens to run on a cash-only day would otherwise pass and then break the
+     * first time somebody pays by card.
+     */
+    public static BigDecimal paymentSummaryTotal(JsonPath overview) {
+        Object node = overview.get("data.payment_summary");
+        BigDecimal total = BigDecimal.ZERO;
+        if (node instanceof List<?> list) {
+            for (Object entry : list) {
+                total = total.add(amountOf(entry));
+            }
+        } else if (node != null) {
+            total = amountOf(node);
+        }
+        return total;
+    }
+
+    /** One payment mode's amount out of payment_summary, by key ("cash", "card"). */
+    public static BigDecimal paymentMode(JsonPath overview, String key) {
+        Object node = overview.get("data.payment_summary");
+        List<?> list = node instanceof List<?> l ? l
+                     : node == null ? List.of() : List.of(node);
+        for (Object entry : list) {
+            if (entry instanceof Map<?, ?> map && key.equals(map.get("key"))) {
+                return amountOf(entry);
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private static BigDecimal amountOf(Object entry) {
+        if (entry instanceof Map<?, ?> map) {
+            Object amount = map.get("amount");
+            if (amount != null) {
+                return new BigDecimal(amount.toString());
+            }
+        }
+        return BigDecimal.ZERO;
     }
 }

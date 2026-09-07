@@ -6,3 +6,6 @@ allure-results/
 # Never commit real tokens
 src/test/resources/config.properties
 /bin/
+_to_delete/
+*.log
+*.err

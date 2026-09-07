@@ -1,11 +1,64 @@
 # Defects found in the Nearz B2B salon API
 
-Everything below was found by API testing between 26 and 30 August 2026. The
-findings are independent of the tool that found them — most came from the
-earlier Python suite; D15, D16 and Finding D came from the REST Assured suite
-that replaced it.
+Everything below was found by API testing between 26 August and 7 September
+2026. The findings are independent of the tool that found them — most of D1–D15
+came from the earlier Python suite; **D16, D17, D18, D19 and Findings D, E, F
+and G came from the REST Assured journey suite** that replaced it, and each was
+found by a journey that ran several mechanisms together rather than by testing
+one endpoint at a time.
 
 Full evidence, reproduction steps and raw numbers are in **`RUN_RESULTS.md`**.
+
+---
+
+## Re-verified 4 September 2026
+
+Every defect that can be re-tested mechanically was re-run against the live QA
+API. Repeat it any time with:
+
+```
+mvn test "-Dtest=VerifyDefectsTest" "-Dsurefire.suiteXmlFiles="
+```
+
+`VerifyDefectsTest` prints a verdict per defect rather than asserting, so one
+still-open defect cannot hide the other twelve.
+
+| | verdict | evidence today |
+|---|---|---|
+| **D9** cross-tenant catalogue | **STILL PRESENT** | salon 4550's token requested salon 1725's services → **200, 5 services returned** |
+| **D2** unknown filter 500s | **STILL PRESENT** | `?status=bogus` → **500** on both waitlist_entries and customer_memberships |
+| **D3** blank date accepted | **STILL PRESENT** | `date=""` → **200** |
+| **D8** past-dated booking | **STILL PRESENT** | a booking dated 30 days ago → **200**; `DELETE` → 404 |
+| **D12** unattributed revenue | **STILL PRESENT** | a bill with no `staff_id` moved Sales +1180 and Staff Performance **+0** |
+| **D15** DELETE product 500s | **STILL PRESENT** | first DELETE **500**, second **404** — it deleted anyway |
+| **D17** 60s report cache | **STILL PRESENT** | 11s after a booking: dashboard read 90, cache-busted read **91** |
+| **Finding A** staff revenue counts products | **STILL PRESENT** | a 1,000 service + 200 product moved staff service revenue by **1,416**, not 1,180 |
+| **Finding C** refund keeps its discount | **STILL PRESENT** | revenue reversed to **0**, discount stayed at **+100** |
+| **Finding D** SHOW omits the user | **STILL PRESENT** | `GET /appointments/{id}` → `data.user` absent |
+| **D4** unparseable date | **PARTLY FIXED** | `date="not-a-date"` now answers **400**, not a silent empty list. The blank-date half (D3) still returns 200. |
+| **D1** 404 served as 200 | ~~NOT REPRODUCED~~ → **STILL PRESENT** | *Narrowed 7 Sep.* Bills and appointments do answer 404, but the sweep this row asked for found `staffs#show` and `products#show` still answering **200 + `{"error":"not_found"}`** — the latter for a product that exists. See D1 below. |
+| **D6** per_page cap | **INCONCLUSIVE** | only 94 bookings today, so the 100 cap was never exercised. The mismatch is still visible in the source. |
+| **D11** card vs table | **INCONCLUSIVE** | salon 4536 has no bills this month, so there is nothing for the two figures to disagree about |
+
+### Found since (7 September 2026)
+
+| | verdict | evidence |
+|---|---|---|
+| **D19** refund keeps COGS booked | **OPEN** | sale +200 revenue / +100 COGS; full refund reversed the revenue and returned the stock, COGS **stayed at +100** — net profit permanently 100 short |
+| **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
+| **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
+
+Not mechanically re-testable, and unchanged: **D5** and **D7** (broad sweeps),
+**D10** (needs a month of data on 4536), **D13/D14** (a permanent data state on
+4536 needing a database change), **D16**, **D18** and **D19** (all three tracked
+by deliberately failing tests in the `known-defect` group).
+
+D17 and D18 are also re-measured on every full run by
+`Block10CompositeTest#e2e199_theFindingsStillHold`, which is written to go RED
+the day either one is fixed — so a fix cannot land unnoticed.
+
+**Nothing has been deleted from this document on the strength of one green
+run.** "The symptom did not appear on QA today" is not "the cause was fixed".
 
 ---
 
@@ -155,6 +208,66 @@ from its own items, so revenue and tax stay correct. The appointment card just
 quotes the wrong price. Tracked by a deliberately failing test in the
 `known-defect` group — `Block1EnquiryTest#d16_swappedServiceKeepsOldPrice`.
 
+**D19 — a full refund gives back the revenue and the stock, but keeps the
+cost of goods sold booked.**
+Measured on salon 4550, 7 Sep 2026. One product, cost ₹100, sells for ₹200,
+sold and then fully refunded:
+
+| | `gross_revenue` | `service_cogs` | `net_profit` | stock on shelf |
+|---|---|---|---|---|
+| before | 34,279.60 | 3,100.00 | 31,179.60 | 10 |
+| after sale | 34,479.60 | 3,200.00 | 31,279.60 | 9 |
+| after refund | 34,279.60 | **3,200.00** | **31,079.60** | 10 |
+| net effect | 0 | **+100** | **−100** | 0 |
+
+Revenue unwinds. Tax unwinds. The bottle physically comes back to the shelf and
+is available to sell again. Its cost does not unwind — and will be charged a
+second time when that same bottle is sold again.
+
+So the error **compounds**. Sell and refund one bottle ten times and the books
+carry ₹1,000 of cost for goods that never left the building. Net Profit is
+understated by the cost price of every product ever returned, and nothing on
+the Profit report explains why revenue and profit disagree — `service_cogs`
+just quietly runs high.
+
+This is not the part-refund rule. A **part** refund is a price adjustment: the
+goods stay sold, so the cost correctly stays booked (asserted in API-E2E-157).
+This is a **full** refund — status `refunded`, stock returned — where the cost
+should come back with the goods.
+
+The impact is on the owner's Profit report and Net Margin %, not on the
+customer's money: the refund itself pays out the right amount. Tracked by a
+deliberately failing test in the `known-defect` group —
+`Block7InventoryTest#e2e168_refundReversesCogs`.
+
+*Where to look.* In the repo checkout, `Reports::ProfitQuery` scopes both the
+revenue and the cost queries to `bills.status: %i[paid partial]`:
+
+```ruby
+def date_filtered_bills          # revenue
+  Bill.where(salon_id:, status: %i[paid partial]).where(billed_at: @range.range)
+end
+
+def calculate_cogs               # cost
+  BillItem.joins(:bill)
+          .where(bills: { salon_id:, status: %i[paid partial], billed_at: @range.range })
+          .pick(Arel.sql(cost_expression))
+end
+```
+
+On those scopes a bill that goes to `refunded` should drop out of BOTH. The
+deployed API drops it from revenue and keeps it in COGS, so whatever is running
+on QA does not match this file — the same divergence already noted for
+`gross_revenue`, which the checkout computes tax-inclusive and the deployment
+returns net of tax. **The measurement above is the fact; this code is only
+where to start looking.** The specific question for the backend team is why the
+COGS query's bill-status filter does not match the revenue query's.
+
+Two other things are worth confirming while that is open: whether a **part**
+refund should reduce COGS proportionally (this suite assumes not — the goods
+stayed sold), and whether returning stock to the shelf is even correct for a
+refund of a consumable.
+
 **Finding D — GET and PATCH on an appointment disagree about the user.**
 `AppointmentsController#show` serialises with `exclude_user: true` while
 `#update` uses `exclude_user: false`, so `GET /appointments/{id}` carries no
@@ -175,11 +288,55 @@ by **+₹100**. Profit then reports ₹0 revenue alongside ₹100 of discount gi
 test that checks only the status code passes against a record that does not
 exist.
 
+*Narrowed 7 Sep 2026.* The 4 Sep re-verification recorded "not reproduced" after
+checking bills and appointments, which do now answer a proper 404. That verdict
+was too broad — it was drawn from two endpoints and stated as a fact about the
+API. Two more were found still doing it while building Blocks 6 and 7:
+
+| endpoint | asked for | answers |
+|---|---|---|
+| `GET /salons/{id}/staffs/{staffId}` | a real staff id | `200` + `{"error":"not_found"}` |
+| `GET /salons/{id}/products/{productId}` | a **real, existing** product | `200` + `{"error":"not_found"}` |
+
+The products case is the worse of the two: the record exists and the endpoint
+denies it. `Steps.productRow` reads stock from the product LIST for exactly this
+reason — a test that read `products#show` would see nothing, call it a stock of
+zero, and pass.
+
 **D15 — `DELETE /salons/{id}/products/{id}` returns 500 but deletes anyway.**
 Confirmed: after the 500 the product is gone from the list and a second DELETE
 answers `404 "product not found"`. The salon owner clicks Delete, sees an error,
 and the product disappears regardless. Tracked by a deliberately failing test in
 the `known-defect` group — run `mvn test -Dgroups=known-defect`.
+
+**Finding F — the expense write route is not where the read route is.**
+`GET /salons/{id}/expenses` works, but `POST /salons/{id}/expenses` answers
+**404**. The write route is the top-level `POST /expenses`, and the salon is
+taken from the token rather than the path:
+
+```ruby
+# ExpensesController
+before_action :get_salon, only: [:create]
+def get_salon = @salon = Salon.find_by_user_id(@current_user.id)
+```
+
+Not a bug — but it cost a morning, and it means an integrator cannot write an
+expense for a salon they can read. Both a flat body and one nested under
+`expense` are accepted. `PUT` and `DELETE /expenses/{id}` both work and the
+Profit report follows them exactly.
+
+**Finding G — every completed appointment auto-writes a CREDIT expense row.**
+`{name: "Appointment", expense_type: "Credit", amount: <service price>}`. Salon
+4550's ledger reports **total_credits 160,000 against total_debits 0**. These
+are income rows, not costs, and `operating_expenses` correctly excludes them
+(measured: a Credit of ₹777 moved Operating Expenses by ₹0.00). Recorded
+because the exclusion is load-bearing and undocumented — if it were ever
+dropped, this salon would appear to have spent its entire revenue on nothing.
+Pinned by `Block8ExpenseTest#e2e175_creditIsNotAnExpense`.
+
+One row is worth a second look: an auto-written Credit for a **QA Blow Dry**
+(₹600 in the price list) carries `amount: 1000.0`. Not yet chased down; it may
+be the same stale-`amount` cause as D16.
 
 **D2 — an unknown filter value causes a 500.** `?status=bogus` on
 `/waitlist_entries` and `/customer_memberships`.
@@ -221,10 +378,11 @@ request body is rejected by the endpoint that documents it.
 - The product list is `data.items` on `/salons/{id}/products` but
   `data.products` on `/api/v1/billing/products` — same records, two names.
 - Prices come back as strings (`"90.0"`), not numbers.
-- Reports are cached for 60 seconds when the range includes today
-  (`Reports::BaseController#cached`), with no invalidation on write. It appears
-  inactive on QA — writes show up in the very next read — but if Redis is
-  enabled anywhere else, before/after snapshots could go stale.
+- ~~Reports are cached for 60 seconds… It appears inactive on QA — writes show
+  up in the very next read.~~ **Wrong, and corrected 30 Aug: the cache is very
+  much active on QA.** This line was written before the cache was measured
+  properly, and it is left here struck through because it is the reason the
+  60-second staleness went unnoticed for so long. See **D17**.
 - `POST /appointments` accepts no `customer_id`. The only customer handle is
   `on_behalf_of_mobile_no`, so the enquiry → customer → appointment link is a
   phone number, not an id.
