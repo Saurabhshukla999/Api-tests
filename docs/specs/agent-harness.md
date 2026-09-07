@@ -43,3 +43,11 @@ repository root. CI execution remains unverified until the branch is pushed and
 GitHub runs the workflow. Review manual behavior prompts in AGENT_HARNESS.md in
 a fresh agent session. Live test execution still requires the environment and
 exclusive tenant access described in SETUP.md.
+
+## Follow-up: toolchain unblocked
+
+The subsequent local-setup task installed Temurin 17.0.20.1+1 and Maven 3.9.16.
+Clean compilation and an offline runtime smoke test now pass. See
+[the dependency audit](../DEPENDENCIES.md) for commands, results and the two
+runtime dependency removal probes. The earlier missing-tool evidence above is
+historical; live API and remote CI validation remain unrun.

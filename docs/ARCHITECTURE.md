@@ -56,6 +56,7 @@ endpoint. This is a small set of static helpers, not an enforced layered framewo
 | `Money.java` | BigDecimal, HALF_UP rounding, inclusive/exclusive tax, discount cap and whole-rupee settlement; tolerance 0.01 |
 | `Reports.java` | Selected report summaries flattened into `report.kpi` maps; computes after-minus-before deltas |
 | `BaseJourneyTest.java` | `@BeforeClass(alwaysRun=true)` seeding and shared record/report assertions |
+| `LocalRuntimeTest.java` | Opt-in, in-memory toolchain/dependency smoke test; outside the live XML suite |
 | `ProductCrudTest.java` | Standalone introductory CRUD shape with local cleanup helpers |
 | `VerifyDefectsTest.java` | Opt-in diagnostic audit, mostly printed verdicts; inherits mutating setup |
 

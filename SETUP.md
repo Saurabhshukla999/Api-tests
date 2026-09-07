@@ -55,6 +55,18 @@ This compiles the test sources without invoking TestNG or contacting Nearz.
 It needs neither tokens nor `config.properties`. Compilation is not an API test
 pass. Do not use `-Dmaven.test.skip=true`: that also skips test compilation.
 
+### Optional offline runtime smoke test
+
+```sh
+mvn test "-Dtest=LocalRuntimeTest"
+```
+
+This opt-in test verifies Map-to-JSON serialization, JSON assertions and Allure
+listener/filter integration using an in-memory response. It does not load `Env`,
+open sockets or require credentials. It is deliberately outside `testng.xml`,
+which remains the live business suite. Its report proves local dependencies work,
+not that the Nearz backend is healthy. See [dependency audit](docs/DEPENDENCIES.md).
+
 ## 3. Configure an authorized test environment
 
 Copy the example **only if the destination does not already exist**.

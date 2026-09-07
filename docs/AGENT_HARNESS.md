@@ -41,6 +41,15 @@ rules have one source in AGENTS.md; do not copy them into separate tool policies
    mvn -B -DskipTests test-compile
    ```
 
+   For dependency/runtime changes, also run the credential-free smoke test:
+
+   ```sh
+   mvn test "-Dtest=LocalRuntimeTest"
+   ```
+
+   It returns a response in memory without opening a socket. The default live
+   XML suite does not include this test.
+
 5. If live execution is in scope and authorized, reserve the journey tenant and
    run the smallest selector from [SETUP.md](../SETUP.md). Broaden only when the
    change affects shared behavior. Inspect Surefire counts; zero tests or skipped
