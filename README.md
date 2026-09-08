@@ -3,9 +3,8 @@
 REST Assured + TestNG. Tests the B2B salon management API by following a real
 business journey and checking the reports afterwards.
 
-```bash
-mvn test
-```
+Start with [local setup](SETUP.md) before running live tests. For code structure,
+read [technical architecture](docs/ARCHITECTURE.md).
 
 ---
 
@@ -169,7 +168,7 @@ split-payment `modes[]` payload. Each is fully written; turning one on is
 deleting its `SkipException`.
 
 The 2 deliberate failures live in the `known-defect` group, excluded from the
-normal run and visible on demand with `mvn test -Dgroups=known-defect`:
+normal run and visible on demand with `mvn test "-Dtest=Block*Test" "-Dgroups=known-defect"`:
 
 | | what it asserts | why it fails |
 |---|---|---|
@@ -268,27 +267,38 @@ adding a test.
 - **Prices come back as strings** (`"90.0"`), not numbers.
 - **Reports are cached for 60 seconds** when the range includes today
   (`Reports::BaseController#cached`), with no invalidation on write. It appears
-  inactive on QA — writes show up in the very next read — but if Redis is
-  enabled anywhere else, "after" snapshots could go stale.
+  active in later QA observations. `Reports.snapshot()` uses a unique `_qa`
+  parameter to bypass it; preserve this when asserting report deltas.
 
 ---
 
 ## Setup
 
-1. Copy `src/test/resources/config.properties.example` to `config.properties`
+1. Copy `src/test/resources/config.properties.example` to
+   `src/test/resources/config.properties` (do not overwrite existing credentials)
 2. Paste the three salon tokens
 3. `mvn test`
 
 Any value can be overridden without editing the file:
 
 ```bash
-mvn test -DbaseUrl=https://staging.example.com -DjourneyToken=eyJ...
+mvn test "-DbaseUrl=https://staging.example.com"
 ```
 
 ---
 
 ## Adding a journey
 
-Add a method to `JourneyTest`. If it needs an action that does not exist yet,
+Consult the [Swagger API reference](https://testnearz.co.in/api-docs/index.html)
+for the endpoint contract. Follow the [Swagger credential setup](SETUP.md#swagger-reference-and-documentation-credentials)
+to share documentation access with a coding agent without putting credentials in chat or Git.
+
+Add a method to the appropriate `Block*Test` class. If it needs an action that does not exist yet,
 add one method to `Steps` that performs it and returns whatever id the next step
 needs. Nothing else has to change.
+
+## Working with coding agents
+
+Read [AGENTS.md](AGENTS.md) for shared rules, [CODEX.md](CODEX.md) or
+[CLAUDE.md](CLAUDE.md) for entry points, and the
+[agent harness](docs/AGENT_HARNESS.md) for validation and task specifications.
