@@ -119,6 +119,64 @@ can appear in shell history or process listings. Verify exclusion with:
 git check-ignore src/test/resources/config.properties
 ```
 
+### Swagger reference and documentation credentials
+
+Use the [Nearz Swagger API reference](https://testnearz.co.in/api-docs/index.html)
+to check endpoint methods, paths, request fields, response schemas and security
+requirements when adding or updating automated tests. Use HTTPS when signing in.
+On 8 Sep 2026 the page returned `401` with `Basic realm="API Docs"`, requiring
+an API Docs username and password.
+
+Store these documentation credentials outside the repository. On macOS/Linux:
+
+1. Create a private directory and open a local file in your editor:
+
+   ```sh
+   mkdir -p "$HOME/.config/nearz"
+   chmod 700 "$HOME/.config/nearz"
+   ```
+
+2. Save `~/.config/nearz/swagger.netrc` with this structure, replacing the
+   placeholders locally with credentials from the environment owner:
+
+   ```text
+   machine testnearz.co.in
+   login YOUR_USERNAME
+   password YOUR_PASSWORD
+   ```
+
+3. Restrict file access:
+
+   ```sh
+   chmod 600 "$HOME/.config/nearz/swagger.netrc"
+   ```
+
+4. Tell the coding agent only the file path and that it contains Swagger Basic
+   Auth credentials. Do not paste the username/password into chat, command-line
+   arguments, tickets or tracked files. The file is plain text, protected by
+   local filesystem permissions; it is not an encrypted credential store.
+
+An agent can check access without printing credentials or the page contents:
+
+```sh
+curl --netrc-file "$HOME/.config/nearz/swagger.netrc" \
+  --proto '=https' --silent --show-error --fail \
+  --output /dev/null --write-out '%{http_code}\n' \
+  'https://testnearz.co.in/api-docs/index.html'
+```
+
+Do not use verbose/trace output when authenticating. The command does not follow
+redirects; inspect a redirect's destination before sending credentials elsewhere.
+After access is available, inspect the documentation to identify its actual
+OpenAPI JSON/YAML URL rather than guessing it. Compare the contract with existing
+journeys and record discrepancies instead of weakening assertions to match bugs.
+
+Swagger Basic Auth only unlocks the documentation. API calls may require separate
+bearer tokens: keep those in the ignored `config.properties` described above.
+The Java suite does not read `swagger.netrc`, and reading Swagger does not execute
+or authorize live business journeys. Browser login is an alternative: sign in
+yourself and share the authenticated tab with the agent.
+
 ## 4. Run live tests deliberately
 
 Every command below contacts the configured API and can mutate test data,

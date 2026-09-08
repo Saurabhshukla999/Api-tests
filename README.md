@@ -289,6 +289,10 @@ mvn test "-DbaseUrl=https://staging.example.com"
 
 ## Adding a journey
 
+Consult the [Swagger API reference](https://testnearz.co.in/api-docs/index.html)
+for the endpoint contract. Follow the [Swagger credential setup](SETUP.md#swagger-reference-and-documentation-credentials)
+to share documentation access with a coding agent without putting credentials in chat or Git.
+
 Add a method to the appropriate `Block*Test` class. If it needs an action that does not exist yet,
 add one method to `Steps` that performs it and returns whatever id the next step
 needs. Nothing else has to change.
