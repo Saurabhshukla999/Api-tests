@@ -186,7 +186,7 @@ public class VerifyDefectsTest extends BaseJourneyTest {
                 .pathParam("salonId", SALON)
                 .body(Map.ofEntries(
                         Map.entry("name", "QA VERIFY D15 " + System.currentTimeMillis()),
-                        Map.entry("brand", "QA Brand"), Map.entry("category", "Haircare"),
+                        Map.entry("brand", "QA Brand"), Map.entry("category", "Hair Care"),
                         Map.entry("unit", "pcs"), Map.entry("cost_price", 10),
                         Map.entry("selling_price", 20), Map.entry("opening_stock", 5),
                         Map.entry("reorder_level", 1)))

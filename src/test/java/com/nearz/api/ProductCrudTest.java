@@ -72,7 +72,7 @@ public class ProductCrudTest {
                 .body(Map.ofEntries(
                         Map.entry("name", "CRUD bad unit"),
                         Map.entry("brand", "QA Brand"),
-                        Map.entry("category", "Haircare"),
+                        Map.entry("category", "Hair Care"),
                         Map.entry("unit", "litres"),        // not a legal unit
                         Map.entry("cost_price", 50),
                         Map.entry("selling_price", 90),
@@ -213,7 +213,7 @@ public class ProductCrudTest {
         return Map.ofEntries(
                 Map.entry("name", name),
                 Map.entry("brand", "QA Brand"),
-                Map.entry("category", "Haircare"),
+                Map.entry("category", "Hair Care"),
                 // The API names the legal set if you guess wrong:
                 // "unit must be one of: ml, g, pcs, box"
                 Map.entry("unit", "pcs"),

@@ -511,7 +511,7 @@ public final class Steps {
                 .body(Map.ofEntries(
                         Map.entry("name", name),
                         Map.entry("brand", "QA Brand"),
-                        Map.entry("category", "Haircare"),
+                        Map.entry("category", "Hair Care"),
                         Map.entry("unit", "pcs"),
                         Map.entry("cost_price", costPrice),
                         Map.entry("selling_price", sellingPrice),
