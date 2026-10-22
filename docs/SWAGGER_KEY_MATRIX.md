@@ -95,8 +95,9 @@ Response-schema gaps that limit assertion, not request alignment:
   (`tax.reason` required), SW-10 (SHOW `custom_name`), SW-11 (`total_cost`
   includes commission) and SW-12 (inventory low-stock preview), all now
   reflected in the request/response rows above.
-- Blocks 4-9 ran next, one class at a time: **108 run, 105 pass, 0 fail,
-  3 documented skips**. Two test-side basis errors were fixed (attendance
-  check-in vs rostered shift; dashboard gross revenue vs the Sales report's net
-  split) and two suites needed data repairs (stale staff service bindings,
-  staff rows filtered by `staff_id`).
+- Blocks 4-10 ran next, one class at a time: **123 run, 116 pass, 4 known
+  failures, 3 documented skips**. The four failures are all D20 (refunded
+  bills stay in `bills_count`). Two test-side basis errors were fixed
+  (attendance check-in vs rostered shift; dashboard gross revenue vs the Sales
+  report's net split) and two suites needed data repairs (stale staff service
+  bindings, staff rows filtered by `staff_id`).

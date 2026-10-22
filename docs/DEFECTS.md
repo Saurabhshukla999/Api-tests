@@ -48,6 +48,7 @@ still-open defect cannot hide the other twelve.
 | **D20** refunded bills stay in `bills_count` | **OPEN** | today's sales report: 17 rows = 14 paid + 3 refunded, and `bills_count` = **17**; the spec says fully refunded bills are excluded |
 | **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
+| **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 
@@ -475,6 +476,20 @@ bill, fully refunds it, then raises and settles a second one; the test expects
 `bills_count` to move by **1** and it moves by **2**. Revenue, payments,
 discounts and refund totals all reverse correctly — only the count is wrong.
 
+It is also the only failure left in Block 10. On the second full run of
+22 Oct 2026, four composite journeys each created a bill, refunded it, and then
+did more trade; every one saw `bills_count` include the refunded bill:
+
+| case | expected movement | actual movement | `bills_count` |
+|---|---|---|---|
+| `e2e192_threeSalesOneRefund` | +2 | +3 | 264 → 267 |
+| `e2e193_discountedBasketRefundedAndRebought` | +1 | +2 | 267 → 269 |
+| `e2e194_fourStatesReconcile` | +2 | +3 | 269 → 272 |
+| `e2e200_theWholeSystem` | +1 | +2 | 296 → 298 |
+
+The same cases failed the same way on the first run (215 → 218, 218 → 220,
+220 → 223, 245 → 247), so this is not an artefact of one run.
+
 ### D21 — "First-Time Visitors" only counts customers with exactly one visit
 
 Swagger (`reports.json`, Customers summary):
@@ -520,3 +535,22 @@ Here the **whole number is already 10 digits**, and stripping `91` leaves 8 —
 so a legitimate local mobile is corrupted. The generator now avoids the `91`
 prefix so the journey can test the customer-rename join rather than this
 normaliser; the API defect remains.
+
+### D23 — enquiry conversion can answer 422 after creating the customer
+
+On the first Block 10 run, the eighth enquiry conversion in
+`e2e198_tenTransactions` answered **422**. The customer profile was nevertheless
+created:
+
+```
+enquiry 3536  phone 9502686662  status "new" (list, stale)
+customer 4229  name "QA E2E-198 #8"  phone 9502686662   (search)
+POST /salons/4550/enquiries/3536/convert  ->  409
+  {"error":"enquiry is already converted"}
+```
+
+The retry was not blind: the customer was looked up first and found, so the
+write had succeeded. The test passed on two later runs, so this is recorded as
+an observed response/write split rather than a reproducible failure.
+`Steps.convertEnquiry` now throws with the redacted response body, so the next
+occurrence carries the reason instead of only the status code.
