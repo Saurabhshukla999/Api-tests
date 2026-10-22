@@ -27,8 +27,11 @@
   `Steps.createStaff`, `Steps.markAttendance`, `Catalogue.openEveryDay`,
   `Catalogue.findOrCreateService`, `ProductCrudTest` payloads. Callers are the
   Block1/4/5/6/7/8/9/10 journeys and `ProductCrudTest`.
-- Local-only or live validation: local only. No live run was authorized.
-- Data created/changed: none - no test was executed against the API.
+- Local or live validation: both. Live runs started 22 Oct 2026 on the journey
+  tenant, serialized; `ProductCrudTest` 7/7 green, then Block 1.
+- Data created/changed: journey-tenant enquiries, customers, appointments,
+  bills, payments and refunds created by the journeys. No shared setting was
+  changed; GST-off is per-bill.
 - Settings to restore: none.
 
 ## Acceptance criteria
@@ -38,8 +41,10 @@
   - sent by a helper and asserted on the documented response shape, or
   - listed in `docs/SWAGGER_KEY_MATRIX.md` under "deliberately not sent" with a
     reason.
-- Spec/live contradictions are recorded as SW-1..SW-7 in `docs/DEFECTS.md`; no
+- Spec/live contradictions are recorded as SW-1..SW-10 in `docs/DEFECTS.md`; no
   test is bent to a documented route or verb that the API does not serve.
+- Genuine API defects found by the live runs are recorded as D20..D22 and the
+  affected assertions are left in place (no relaxation to force green).
 - Existing case IDs, skips, known-defect grouping, money expectations and
   `_qa` cache busting are unchanged.
 
@@ -59,20 +64,43 @@ Material deviations:
   both change bookable capacity, and the journeys book fixed slots.
 - `lead_source_id` and `assigned_to_id` on enquiries are not sent: they need a
   lookup and a staff id, and no current test asserts assignment.
+- `sales.service_revenue` is asserted **net of GST**, because that is what the
+  live tile is labelled and what makes `service + product + gst = total`; the
+  spec says GST-included (SW-8).
+- GST-off bills send `tax.reason`, which the live API requires and the spec
+  omits (SW-9).
+- Appointment SHOW is asserted on `custom_name`; the live `service_name` is the
+  catalogue name even when a custom label exists (SW-10).
+- Slots that have already started are not allocated: the live API
+  auto-completes a past-dated appointment, after which every status change is
+  refused. The one-minute margin covers the booking round trip.
+- `newPhone()` no longer derives digits from the millisecond window (two runs
+  could collide) and avoids a `91` prefix, which the live normaliser truncates
+  (D22). `Catalogue.secondServiceStaffId()` re-assigns the dual stylist to both
+  QA services when an older record is reused.
 
 ## Validation evidence
 
 | Command/check | Result | What it establishes / limitation |
 |---|---|---|
-| `mvn -B -DskipTests clean test-compile` | BUILD SUCCESS, 20 test sources | Test sources compile; **no API behavior verified** |
-| Live selector on the journey tenant | Not run | Live validation was not authorized; added response assertions remain unverified against the deployed API |
-| Diff review | Pending | Confirm only intended files changed and no secrets or report artifacts are staged |
+| `mvn -B -DskipTests clean test-compile` | BUILD SUCCESS, 20 test sources | Test sources compile - no API behaviour |
+| `mvn test -Dtest=ProductCrudTest -DexcludedGroups=known-defect` | **7/7 pass** | The documented product keys (`sku`, `status`, `linked_service_ids`) round-trip live |
+| `mvn test -Dtest=Block1EnquiryTest -DexcludedGroups=known-defect` | **22 run: 18 pass, 3 fail, 1 skip** | Failures were `e2e004` (test model, since corrected), `e2e010` (D21) and `e2e020` (D20). Serialized on salon 4550, 22 Oct 2026 |
+| `mvn test -Dtest=Block1EnquiryTest#e2e004_fullRefundReverses ...` | **1/1 pass** | Corrected refund/customer model - a fully refunded bill is zero visits |
+| `mvn test -Dtest=Block1EnquiryTest#e2e008_serviceChanged+e2e009_customerDetailsChanged ...` | **2/2 pass** | Dual-stylist assignment repair, SHOW `custom_name`, non-`91` phone |
+| `mvn test -Dtest=Block1EnquiryTest#e2e014_gstDisabled+e2e016_cancelRebookComplete ...` | **2/2 pass** | `tax.reason` for GST-off and future-only slot allocation |
+| `git diff --check` | Pending before commit | Whitespace and secret/artifact review |
+
+Serialized-run note: every command above was the only live run against the
+journey tenant at the time. `-Dtest` selects the class/method but
+`-DexcludedGroups=known-defect` keeps the known-defect group excluded.
 
 ## Handoff
 
-- Compile-only. The added assertions are derived from documented response shapes
-  (`Enquiry`, `Staff`, `AttendanceEntry`, product create response). If a later
-  live run disagrees, the failure is evidence about that shape, not a reason to
-  drop the assertion.
-- Next action for the environment owner: authorize a serialized journey-tenant
-  run of `ProductCrudTest` and Block1/6 to verify the new assertions.
+- Block 1 now stands at **19 pass, 2 fail, 1 skip**: `e2e010` (D21) and
+  `e2e020` (D20) are genuine API defects and must stay red until the API
+  changes. Do not weaken them to green.
+- `e2e004` was a test-model error, not an API defect: a fully refunded bill is
+  zero visits by the documented billing-history definition.
+- Remaining suite blocks are still unrun. The next step is Block 4, then 5-10
+  and 2-3, one class at a time with the same selector flag.

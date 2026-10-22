@@ -30,7 +30,7 @@ other ~130 documented endpoints is endpoint coverage, not key alignment.
 | `POST /appointments` | salon_id R, date R, start_time R, end_time R, comment, booking_source, on_behalf_of_mobile_no, on_behalf_of_username, discount, appointment_services_attributes[salon_service_id R, staff_id] | all but `discount`; **sends `customer_id`, which the spec does not list** | `discount` = 0 | - |
 | `PATCH /appointments/{id}` | Spec documents **PUT** only: discount, comment, date, start_time, end_time, appointment_services_attributes (no required) | caller-supplied change maps | - | - |
 | `PATCH /appointments/{id}/status` | status R, reason | status | - | `reason` - only meaningful on cancel/no-show; no test asserts it |
-| `POST /api/v1/billing/bills` | customer_id, appointment_id, status, items[type, ref_id, name, category, staff_id, staff_name, qty, **price**, disc_pct, duration], discount[pct, flat, coupon_code, membership, staff, approved_by_staff_id], tax[gst_enabled, mode], notes[bill_note, private_note], payment[partial, advance, mode, amount_paid, amount, modes[mode, amount R]] | customer_id, status, items(type, ref_id, qty, **unit_price**, staff_id), discount[pct, flat], tax[gst_enabled, mode] | - | `appointment_id`, `notes`, `payment` (settlement goes through finalize), item `name`/`category`/`staff_name`/`disc_pct`/`duration` |
+| `POST /api/v1/billing/bills` | customer_id, appointment_id, status, items[type, ref_id, name, category, staff_id, staff_name, qty, **price**, disc_pct, duration], discount[pct, flat, coupon_code, membership, staff, approved_by_staff_id], tax[gst_enabled, mode], notes[bill_note, private_note], payment[partial, advance, mode, amount_paid, amount, modes[mode, amount R]] | customer_id, status, items(type, ref_id, qty, **unit_price**, staff_id), discount[pct, flat], tax[gst_enabled, mode], plus **`tax.reason`** whenever `gst_enabled=false` (live requirement, undocumented - SW-9) | - | `appointment_id`, `notes`, `payment` (settlement goes through finalize), item `name`/`category`/`staff_name`/`disc_pct`/`duration` |
 | `PUT /api/v1/billing/bills/{id}` | Spec documents **PATCH** with the same keys as create | items[type, ref_id, qty, unit_price, staff_id] | - | partial update by design |
 | `POST /api/v1/billing/bills/{id}/finalize` | customer_id, appointment_id, items, discount, tax, notes, payment[partial, advance, mode, amount_paid, amount, modes[amount R, mode]] | payment[mode, amount_paid] | - | partial/advance/modes |
 | `POST /api/v1/billing/bills/{id}/payments` | partial, advance, mode, amount_paid, amount, modes[mode, amount R] | mode, amount_paid | - | partial, advance, amount, modes |
@@ -56,7 +56,7 @@ documented.
 ## Documentation drift found while matching
 
 These are spec defects, not test defects. Tests stay on observed live behaviour;
-the drift is recorded in `docs/DEFECTS.md` as SW-1..SW-7.
+the drift is recorded in `docs/DEFECTS.md` as SW-1..SW-10.
 
 | id | Spec says | Suite observes |
 |---|---|---|
@@ -67,6 +67,9 @@ the drift is recorded in `docs/DEFECTS.md` as SW-1..SW-7.
 | SW-5 | no `/services` operation in `v1/` | `GET /services` returns the master catalogue and supplies the `service_id` that `POST /salon_services` now requires |
 | SW-6 | `PUT /appointments/{id}` | `PATCH /appointments/{id}` performs the update |
 | SW-7 | `PATCH /api/v1/billing/bills/{id}` | `PUT` performs the draft-basket replacement |
+| SW-8 | `sales.service_revenue` is GST-included and sums with `product_revenue` to `total_revenue` | the tile is labelled **"before GST"**; `service + product + gst = total` (13,900 + 200 + 2,538 = 16,638). `services.total_revenue` and `staff_performance.total_service_revenue` **are** gross - only the Sales split is net |
+| SW-9 | bill `tax` documents `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is sent |
+| SW-10 | appointment SHOW `service_name` uses the custom name when one is set | SHOW returns the **catalogue** name in `service_name` and the salon label in `custom_name`; the calendar list puts the custom name in `service_name` |
 
 Response-schema gaps that limit assertion, not request alignment:
 
@@ -79,6 +82,13 @@ Response-schema gaps that limit assertion, not request alignment:
 ## Validation status
 
 - `mvn -B -DskipTests clean test-compile` - BUILD SUCCESS, 20 test sources.
-- **No live run.** The added assertions are derived from documented response
-  shapes; they are unverified against the deployed API until a serialized run on
-  the journey tenant is authorised.
+- `ProductCrudTest` - **7/7 pass** live, including the dedicated `sku` /
+  `status` / `linked_service_ids` case.
+- `Block1EnquiryTest` - **22 run: 18 pass, 3 fail, 1 skip** on 22 Oct 2026
+  (salon 4550, serialized). `e2e004` was a test-model error and passes after
+  correction; the two remaining reds are genuine API defects **D20**
+  (`bills_count` keeps refunded bills) and **D21** (two same-day visits make a
+  first-time customer "returning"). They are left red on purpose.
+- The live run also produced SW-8 (`service_revenue` net of GST), SW-9
+  (`tax.reason` required) and SW-10 (SHOW `custom_name`), all now reflected in
+  the request/response rows above.

@@ -45,6 +45,9 @@ still-open defect cannot hide the other twelve.
 | | verdict | evidence |
 |---|---|---|
 | **D19** refund keeps COGS booked | **OPEN** | sale +200 revenue / +100 COGS; full refund reversed the revenue and returned the stock, COGS **stayed at +100** — net profit permanently 100 short |
+| **D20** refunded bills stay in `bills_count` | **OPEN** | today's sales report: 17 rows = 14 paid + 3 refunded, and `bills_count` = **17**; the spec says fully refunded bills are excluded |
+| **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
+| **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 
@@ -429,6 +432,9 @@ comparison: `docs/SWAGGER_KEY_MATRIX.md`.
 | **SW-5** | no `/services` operation in `v1/` | `GET /services` returns the master catalogue; its id is the `service_id` that `POST /salon_services` requires | `Catalogue.masterServiceId` |
 | **SW-6** | `PUT /appointments/{id}` updates the booking | `PATCH /appointments/{id}` performs the update | `Steps.attemptAppointmentChange`, `Steps.changeAppointment` |
 | **SW-7** | `PATCH /api/v1/billing/bills/{id}` replaces a draft basket | `PUT /api/v1/billing/bills/{id}` performs the replacement | `Steps.updateBillItems` |
+| **SW-8** | `sales.service_revenue` is GST-included and `service_revenue + product_revenue = total_revenue` | `service_revenue` is **before GST**; the live tile is labelled "Service Revenue (before GST)" and `service + product + gst = total` (measured: 13,900 + 200 + 2,538 = 16,638) | `BaseJourneyTest.expectSettled` now asserts the net figure; `Block1EnquiryTest#e2e001` |
+| **SW-9** | bill `tax` accepts `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is present; the key is undocumented | `Steps.createBill`, `Block1EnquiryTest#e2e014` |
+| **SW-10** | appointment SHOW `service_name` "falls back to the catalogue name when the salon has not set a custom name" | SHOW always returns the **catalogue** name in `service_name` and the salon's label in `custom_name` (`Blow Dry` / `QA Blow Dry`); the calendar list promotes the custom name into `service_name` | `Block1EnquiryTest#e2e008` now asserts `custom_name` |
 
 Response-schema gaps that block assertions (not request alignment):
 
@@ -437,3 +443,78 @@ Response-schema gaps that block assertions (not request alignment):
   `description` cannot be asserted on the create response.
 - `POST /api/v1/billing/bills` 201 carries no documented body schema; the suite
   asserts the id and then the money through report deltas rather than fields.
+
+---
+
+## Found 22 October 2026 (Block 1 against the live journey tenant)
+
+These three were found in the same serialized rerun and are **API behaviour**,
+not test defects. The assertions stay as they are, so the affected journeys keep
+failing until the API changes; the rest of the block proceeds.
+
+### D20 — a fully refunded bill is still counted in `sales.bills_count`
+
+The spec is explicit (`reports.json`, Sales summary):
+
+> `bills_count` — "Bills raised in this period, after refunds. A fully refunded
+> bill is excluded here."
+
+Live, on salon 4550 with `range=today`:
+
+```
+GET /salons/4550/reports/sales/rows?range=today&per_page=100
+  17 rows: 14 paid + 3 refunded
+GET /salons/4550/reports/sales/summary?range=today
+  bills_count = 17
+```
+
+So the refunded rows are not excluded. `Block1EnquiryTest#e2e020` raises a
+bill, fully refunds it, then raises and settles a second one; the test expects
+`bills_count` to move by **1** and it moves by **2**. Revenue, payments,
+discounts and refund totals all reverse correctly — only the count is wrong.
+
+### D21 — "First-Time Visitors" only counts customers with exactly one visit
+
+Swagger (`reports.json`, Customers summary):
+
+> `new_customers` — "Customers who visited in this window and had never visited
+> before it."
+
+Live, today:
+
+```
+new_customers              = 12
+returning_customers        = 3
+new_customers_in_range     = 27   (records created today)
+```
+
+The three "returning" customers are exactly the three customers who have **two
+completed visits today** (customer ids 3959, 3978, 3966). The 27 records created
+today split 12 with one visit, 12 with none and 3 with two — there is no
+customer whose first visit predates the window. A brand-new customer billed
+twice in one day is therefore reported as returning, contradicting "had never
+visited before it".
+
+A fully refunded sale is correctly treated as **no visit**: the customer profile
+documents a visit as "something the customer was charged for", counted from
+bills, and the customer from `e2e004` (id 3977, one completed appointment and a
+fully refunded bill) has `total_visits = 0`. `e2e004` was asserting the
+opposite and has been corrected to expect no movement; the two-visit case is a
+straight contradiction of the documented definition and remains red.
+
+### D22 — a valid 10-digit phone beginning `91` is truncated to 8 digits
+
+`Steps.newPhone()` generated `9100955749` for `e2e009`. The enquiry was created
+with that number, but the converted customer profile returned:
+
+```
+expected 9100955749
+actual   00955749
+```
+
+The staff-phone documentation says a leading `91`/`0` trunk prefix is dropped
+when it precedes a 10-digit national number (`+91 98765 43210` → `9876543210`).
+Here the **whole number is already 10 digits**, and stripping `91` leaves 8 —
+so a legitimate local mobile is corrupted. The generator now avoids the `91`
+prefix so the journey can test the customer-rename join rather than this
+normaliser; the API defect remains.
