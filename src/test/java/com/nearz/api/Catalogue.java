@@ -281,8 +281,25 @@ public final class Catalogue {
         if (all != null) {
             for (Map<String, Object> member : all) {
                 String name = String.valueOf(member.get("name"));
-                if (OURS.matcher(name).matches()) {
-                    ids.add(Integer.parseInt(member.get("id").toString()));
+                if (!OURS.matcher(name).matches()) {
+                    continue;
+                }
+                int id = Integer.parseInt(member.get("id").toString());
+                ids.add(id);
+                // A staff record outlives the service it was created against.
+                // Salon 4550 still carried stylists pointing at service 54645
+                // after QA Haircut had been recreated as 54943, and every
+                // booking on those stylists answered "not assigned to QA
+                // Haircut". Empty service_ids mean unrestricted and are left
+                // alone; a non-empty stale list is re-pointed at today's id.
+                List<Integer> assigned = serviceIdsOf(member);
+                if (!assigned.isEmpty() && !assigned.contains(serviceId)) {
+                    given().spec(Api.journey())
+                            .pathParam("salonId", salonId)
+                            .pathParam("id", id)
+                            .body(Map.of("salon_service_ids", List.of(serviceId)))
+                            .when().put("/salons/{salonId}/staff/{id}")
+                            .then().statusCode(200);
                 }
             }
         }
@@ -454,6 +471,46 @@ public final class Catalogue {
     }
 
     /**
+     * A contiguous block of `count` 30-minute slots on ONE roster stylist.
+     *
+     * Needed when one appointment carries several services: the API sums their
+     * durations and refuses an end time that is too short ("End time must leave
+     * at least 60 minutes for the services booked"). A single-slot Booking would
+     * book two half-hours for the stylist and collide with the next test.
+     */
+    public Booking nextFreeBlock(int count) {
+        if (takenSlots.isEmpty()) {
+            readTodaysCalendar();
+        }
+        for (int slot = 0; slot + count <= SLOTS; slot++) {
+            String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
+            for (int staffId : staffIds) {
+                if (unusableStaff.contains(staffId)) {
+                    continue;
+                }
+                boolean free = true;
+                for (int i = 0; i < count; i++) {
+                    if (takenSlots.contains(staffId + "@" + startOf(slot + i))) {
+                        free = false;
+                        break;
+                    }
+                }
+                if (free) {
+                    for (int i = 0; i < count; i++) {
+                        takenSlots.add(staffId + "@" + startOf(slot + i));
+                    }
+                    return new Booking(start, endOf(slot + count - 1), staffId);
+                }
+            }
+        }
+        throw new IllegalStateException(
+            "no free " + count + "-slot block remains today for any roster stylist.");
+    }
+
+    /**
      * The next free slot for ONE named stylist.
      *
      * nextFreeSlot() only ever offers roster stylists, so the dual-assigned
@@ -518,9 +575,24 @@ public final class Catalogue {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> staff = (Map<String, Object>) item.get("staff");
                     Object start = item.get("start_time");
-                    if (staff != null && staff.get("id") != null && start != null) {
+                    Object end = item.get("end_time");
+                    if (staff == null || staff.get("id") == null || start == null) {
+                        continue;
+                    }
+                    // Mark EVERY half-hour the appointment occupies, not just its
+                    // start. A second service or a longer treatment can run past
+                    // the next slot, and a start-only map would offer that slot
+                    // again and collect "already has a booking".
+                    LocalTime from = LocalTime.parse(start.toString().substring(0, 5));
+                    LocalTime to = end == null
+                            ? from.plusMinutes(30)
+                            : LocalTime.parse(end.toString().substring(0, 5));
+                    if (!to.isAfter(from)) {
+                        to = from.plusMinutes(30);
+                    }
+                    for (LocalTime at = from; at.isBefore(to); at = at.plusMinutes(30)) {
                         takenSlots.add(staff.get("id") + "@"
-                                     + start.toString().substring(0, 5));
+                                     + String.format("%02d:%02d", at.getHour(), at.getMinute()));
                     }
                 }
             }

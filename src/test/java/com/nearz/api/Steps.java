@@ -181,7 +181,7 @@ public final class Steps {
             throw new AssertionError(
                 "booking an appointment failed with " + response.statusCode()
               + " at " + slot.start() + " for stylist " + slot.staffId()
-              + "\n  " + body);
+              + "\n  " + redacted(body));
         }
         throw new IllegalStateException(
             "could not find a free slot after 25 attempts on " + LocalDate.now()
@@ -303,7 +303,7 @@ public final class Steps {
             throw new AssertionError(
                 "PATCH /appointments/" + appointmentId + " was refused with "
               + response.statusCode() + "\n  sent: " + changes
-              + "\n  got:  " + response.asString());
+              + "\n  got:  " + redacted(response));
         }
         return response.jsonPath();
     }
@@ -324,8 +324,13 @@ public final class Steps {
     }
 
     /** Response text with the refreshed JWT removed - logs are not a secret store. */
-    private static String redacted(Response response) {
-        return response.asString().replaceAll(
+    public static String redacted(Response response) {
+        return redacted(response.asString());
+    }
+
+    /** Same redaction for callers that only kept the body string. */
+    public static String redacted(String body) {
+        return body.replaceAll(
             "\"token\"\\s*:\\s*\"[^\"]*\"", "\"token\":\"<redacted>\"");
     }
 

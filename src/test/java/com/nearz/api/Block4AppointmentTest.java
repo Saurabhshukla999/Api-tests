@@ -88,7 +88,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
                 List.of(Steps.line(catalogue.serviceId, null)));
         assertEquals(response.statusCode(), 200,
             "booking without a stylist was refused, but staff is optional on "
-          + "AppointmentService: " + response.asString());
+          + "AppointmentService: " + Steps.redacted(response));
 
         int appointmentId = response.jsonPath().getInt("data.id");
         JsonPath booked = Steps.readAppointment(appointmentId);
@@ -184,13 +184,17 @@ public class Block4AppointmentTest extends BaseJourneyTest {
         var before = calendarSnapshot();
 
         NewCustomer customer = arriveAsEnquiry("QA E2E-030");
-        Catalogue.Booking slot = catalogue.nextFreeSlot();
+        // Two 30-minute services on ONE stylist need a 60-minute window. The API
+        // refuses a 30-minute end time with "End time must leave at least 60
+        // minutes for the services booked" - correctly, because the stylist
+        // cannot do both at once.
+        Catalogue.Booking slot = catalogue.nextFreeBlock(2);
         Response response = Steps.attemptBooking(SALON, customer.name(), customer.phone(),
                 slot.start(), slot.end(),
                 List.of(Steps.line(catalogue.serviceId, slot.staffId()),
                         Steps.line(catalogue.serviceId, slot.staffId())));
         assertEquals(response.statusCode(), 200,
-            "two services on one appointment was refused: " + response.asString());
+            "two services on one appointment was refused: " + Steps.redacted(response));
 
         int appointmentId = response.jsonPath().getInt("data.id");
         assertEquals(Steps.readAppointment(appointmentId)
@@ -224,7 +228,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
                 List.of(Steps.line(catalogue.serviceId, first.staffId()),
                         Steps.line(catalogue.serviceId, second.staffId())));
         assertEquals(response.statusCode(), 200,
-            "two stylists on one appointment was refused: " + response.asString());
+            "two stylists on one appointment was refused: " + Steps.redacted(response));
 
         int appointmentId = response.jsonPath().getInt("data.id");
         List<Integer> staff = Steps.readAppointment(appointmentId)
@@ -601,7 +605,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
         Response first = Steps.attemptBooking(SALON, customer.name(),
                 customer.phone(), slot.start(), slot.end(), lines);
         assertEquals(first.statusCode(), 200,
-            "the first booking failed: " + first.asString());
+            "the first booking failed: " + Steps.redacted(first));
 
         Response second = Steps.attemptBooking(SALON, customer.name(),
                 customer.phone(), slot.start(), slot.end(), lines);
@@ -613,7 +617,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
         assertEquals(created.compareTo(ONE), 0,
             "sending the same booking twice created " + created + " appointments. "
           + "The second request answered " + second.statusCode() + ": "
-          + second.asString());
+          + Steps.redacted(second));
     }
 
     /**
@@ -644,7 +648,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
 
         assertEquals(Reports.moved(before, after, APPTS).compareTo(ONE), 0,
             "a retry of the same request produced a second appointment. The "
-          + "retry answered " + retry.statusCode() + ": " + retry.asString());
+          + "retry answered " + retry.statusCode() + ": " + Steps.redacted(retry));
     }
 
     /**
@@ -808,10 +812,15 @@ public class Block4AppointmentTest extends BaseJourneyTest {
 
     /** One stylist's revenue today, from the Staff Performance rows. */
     private BigDecimal staffRevenue(int staffId) {
+        // The rows endpoint caps the page at 100 (the response meta says so even
+        // when 200 is requested) and the salon has 400+ staff rows, so reading
+        // page 1 and searching for the id finds nothing. staff_id is the
+        // documented filter and makes the read independent of sort order.
         JsonPath rows = io.restassured.RestAssured.given().spec(Api.journey())
                 .pathParam("salonId", SALON)
                 .queryParam("range", "today")
-                .queryParam("limit", 200)
+                .queryParam("staff_id", staffId)
+                .queryParam("limit", 100)
                 .queryParam("_qa", System.nanoTime())
                 .when().get("/salons/{salonId}/reports/staff_performance/rows")
                 .then().statusCode(200).extract().jsonPath();
@@ -871,7 +880,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
 
         assertTrue(response.statusCode() >= 400,
             "a booking with an invalid " + what + " id was ACCEPTED with "
-          + response.statusCode() + ": " + response.asString());
+          + response.statusCode() + ": " + Steps.redacted(response));
         assertEquals(Reports.moved(before, after, APPTS).compareTo(ZERO), 0,
             "a booking with an invalid " + what + " id was refused with "
           + response.statusCode() + " but still left an appointment behind");
