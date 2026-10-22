@@ -3,11 +3,13 @@ package com.nearz.api;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.testng.Assert.assertEquals;
 
@@ -83,6 +85,41 @@ public class ProductCrudTest {
                 .then()
                 .statusCode(422)
                 .body("error", equalTo("unit must be one of: ml, g, pcs, box"));
+    }
+
+    @Test(description = "POST accepts the documented sku and linked_service_ids and echoes them back")
+    public void createProductWithDocumentedOptionalKeys() {
+        String name = "CRUD linked " + System.currentTimeMillis();
+        String sku = "QA-SKU-" + System.nanoTime();
+        int serviceId = firstServiceId();
+
+        int id = given().spec(Api.journey())
+                .pathParam("salonId", SALON)
+                .body(Map.ofEntries(
+                        Map.entry("name", name),
+                        Map.entry("brand", "QA Brand"),
+                        Map.entry("category", "Hair Care"),
+                        Map.entry("unit", "pcs"),
+                        Map.entry("cost_price", 50),
+                        Map.entry("selling_price", 90),
+                        Map.entry("opening_stock", 10),
+                        Map.entry("reorder_level", 2),
+                        // Documented optional keys. sku is normally generated;
+                        // sending one must be honoured and must be the SKU the
+                        // record reports afterwards.
+                        Map.entry("sku", sku),
+                        Map.entry("status", "inactive"),
+                        Map.entry("linked_service_ids", List.of(serviceId))))
+                .when()
+                .post(COLLECTION)
+                .then()
+                .spec(Api.created())
+                .body("data.sku", equalTo(sku))
+                .body("data.status", equalTo("inactive"))
+                .body("data.linked_services", hasItem(serviceId))
+                .extract().jsonPath().getInt("data.id");
+
+        deleteQuietly(id);
     }
 
     // =======================================================================
@@ -220,7 +257,25 @@ public class ProductCrudTest {
                 Map.entry("cost_price", cost),
                 Map.entry("selling_price", price),
                 Map.entry("opening_stock", 10),
-                Map.entry("reorder_level", 2));
+                Map.entry("reorder_level", 2),
+                // Documented. active is the API default; sending it keeps the
+                // payload aligned with the schema and proves the value is echoed.
+                Map.entry("status", "active"));
+    }
+
+    /** Any service id, for the documented linked_service_ids key. */
+    private static int firstServiceId() {
+        List<Integer> ids = given().spec(Api.journey())
+                .queryParam("per_page", 1)
+                .when()
+                .get("/api/v1/billing/services")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getList("data.services.id", Integer.class);
+
+        assertEquals(ids == null || ids.isEmpty(), false,
+                "the salon has no service to link a product to");
+        return ids.get(0);
     }
 
     private int create(String name, int cost, int price) {

@@ -34,15 +34,17 @@ import static org.testng.Assert.assertTrue;
  * `sales.total_revenue`, which is why these are asserted EQUAL rather than
  * merely moving together.
  *
- * Measured on salon 4550, 7 Sep 2026, mid-run with 65 bills on the day:
+ * Measured on salon 4550, 22 Oct 2026, mid-run:
  *
- *     revenue        dashboard 56,592.00   sales.total_revenue   56,592.00
- *     services       sources   44,721.33   sales.service_revenue 44,721.33
- *     products       sources   11,870.67   sales.product_revenue 11,870.67
- *     collected      payments  56,592.00   payments.total_collected 56,592.00
- *     appointments   79 / 77 completed     report 79 / 77 completed
+ *     revenue        dashboard 200,819.40   sales.total_revenue   200,819.40
+ *     services       sources   190,592.97   services.total_revenue 190,592.97
+ *     products       sources    10,226.43   total - services       10,226.43
  *
- * All five agreed to the paisa. This block is what keeps them agreeing.
+ * The dashboard is GROSS-incl-tax; the Sales report's service/product split is
+ * net (SW-8): sales.service_revenue was 162,129.43 on the same snapshot, and
+ * comparing the two is a basis mismatch, not a disagreement. The gross service
+ * figure lives in the Services report, so that is what the split is checked
+ * against; the remainder is the non-service half.
  */
 public class Block9DashboardTest extends BaseJourneyTest {
 
@@ -118,7 +120,8 @@ public class Block9DashboardTest extends BaseJourneyTest {
 
         Both before = readBoth();
         JsonPath stockBefore = Steps.dashboardTab(SALON, "inventory", "today");
-        assertNull(Steps.lowStockSeverity(stockBefore, productId),
+        int lowBefore = stockBefore.getInt("data.summary.low_stock.value");
+        assertNull(Steps.lowStockSeverity(SALON, productId),
             "the product is already on the low-stock list before anything was "
           + "sold - it opened with 10 against a reorder level of 9");
 
@@ -149,10 +152,18 @@ public class Block9DashboardTest extends BaseJourneyTest {
 
         assertEquals(Steps.stockOf(SALON, productId).compareTo(new BigDecimal("9")), 0,
             "the sale did not leave the shelf");
-        assertNotNull(Steps.lowStockSeverity(stockAfter, productId),
-            "stock fell to 9 against a reorder level of 9 and the product is "
-          + "still not on the dashboard's low-stock list - the salon gets no "
-          + "warning to reorder");
+
+        // The tab's own KPI must count it. The `low_stock` array is a 10-row
+        // preview and this product (severity low, stock 9) can sit outside it,
+        // so the full check goes to the Action Center list (SW-12).
+        int lowAfter = stockAfter.getInt("data.summary.low_stock.value");
+        assertEquals(lowAfter - lowBefore, 1,
+            "stock fell to 9 against a reorder level of 9 but the inventory "
+          + "tab's low-stock count moved by " + (lowAfter - lowBefore) + ", not 1");
+        assertEquals(Steps.lowStockSeverity(SALON, productId), "low",
+            "stock fell to 9 against a reorder level of 9 and the product has no "
+          + "low severity on the full low-stock list - the salon gets no warning "
+          + "to reorder");
     }
 
     // =====================================================================
@@ -191,12 +202,18 @@ public class Block9DashboardTest extends BaseJourneyTest {
           + "revenue KPI says " + headline + " - the pie chart and the number "
           + "above it disagree");
 
-        assertTrue(Money.closeEnough(services, now.reports().get("sales.service_revenue")),
-            "dashboard services " + services + " vs sales.service_revenue "
-          + now.reports().get("sales.service_revenue"));
-        assertTrue(Money.closeEnough(products, now.reports().get("sales.product_revenue")),
-            "dashboard products " + products + " vs sales.product_revenue "
-          + now.reports().get("sales.product_revenue"));
+        assertTrue(Money.closeEnough(services,
+                       now.reports().get("services.total_revenue")),
+            "dashboard services " + services + " vs services.total_revenue "
+          + now.reports().get("services.total_revenue")
+          + " (sales.service_revenue is net of GST and is not the same basis)");
+
+        BigDecimal nonService = products.add(memberships).add(combos);
+        BigDecimal expectedNonService = now.reports().get("sales.total_revenue")
+                .subtract(now.reports().get("services.total_revenue"));
+        assertTrue(Money.closeEnough(nonService, expectedNonService),
+            "dashboard products+memberships+combos " + nonService
+          + " vs sales.total_revenue - services.total_revenue " + expectedNonService);
     }
 
     /**
@@ -250,8 +267,8 @@ public class Block9DashboardTest extends BaseJourneyTest {
      * trading. Four independent pairs of queries forced to agree:
      *
      *     dashboard revenue          == sales.total_revenue
-     *     revenue_sources[services]  == sales.service_revenue
-     *     revenue_sources[products]  == sales.product_revenue
+     *     revenue_sources[services]  == services.total_revenue (gross)
+     *     sources[products+...]      == sales.total_revenue - services.total_revenue
      *     payment_summary summed      == payments.total_collected
      *     appointments completed     == appointments.completed
      *
@@ -298,13 +315,27 @@ public class Block9DashboardTest extends BaseJourneyTest {
               revenueKpi(now.dash()), "dashboard revenue",
               now.reports().get("sales.total_revenue"), "sales.total_revenue");
 
-        agree("service revenue",
+        // The dashboard's stated basis is gross_incl_tax, while the Sales
+        // report's service/product split is NET of GST (SW-8). The Services
+        // report carries gross service revenue, so that is the comparable
+        // figure - comparing the dashboard to sales.service_revenue would be a
+        // basis mismatch, not a disagreement between surfaces.
+        BigDecimal grossServices = now.reports().get("services.total_revenue");
+        agree("service revenue (gross)",
               Steps.revenueSource(now.dash(), "services"), "revenue_sources[services]",
-              now.reports().get("sales.service_revenue"), "sales.service_revenue");
+              grossServices, "services.total_revenue");
 
-        agree("product revenue",
-              Steps.revenueSource(now.dash(), "products"), "revenue_sources[products]",
-              now.reports().get("sales.product_revenue"), "sales.product_revenue");
+        // Everything that is not services. With memberships and combo packs at
+        // zero today this is the product half; the extra terms keep it honest
+        // if either starts being sold.
+        BigDecimal dashNonService = Steps.revenueSource(now.dash(), "products")
+                .add(Steps.revenueSource(now.dash(), "memberships"))
+                .add(Steps.revenueSource(now.dash(), "combo_packs"));
+        BigDecimal reportNonService = now.reports().get("sales.total_revenue")
+                .subtract(grossServices);
+        agree("non-service revenue (gross)",
+              dashNonService, "revenue_sources[products+memberships+combo_packs]",
+              reportNonService, "sales.total_revenue - services.total_revenue");
 
         // payment_summary is a LIST of modes (and a bare object on a
         // single-mode day). Totalling it also proves the mode split adds up to

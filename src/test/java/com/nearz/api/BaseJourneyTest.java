@@ -188,7 +188,13 @@ public abstract class BaseJourneyTest {
         expectMoved(before, after, "profit.total_discount", discount);
         expectMoved(before, after, "staff_performance.total_service_revenue", gross);
         if (products == 0) {
-            expectMoved(before, after, "sales.service_revenue", gross);
+            // The live Sales report splits GST out of service revenue: the tile
+            // is labelled "Service Revenue (before GST)" and service + product +
+            // gst equals total_revenue on the same response. The swagger text
+            // still says service_revenue is GST-included and sums with
+            // product_revenue to total_revenue; live wins here and the conflict
+            // is recorded as SW-8 in docs/DEFECTS.md.
+            expectMoved(before, after, "sales.service_revenue", taxable);
             expectMoved(before, after, "services.total_revenue", gross);
             expectMoved(before, after, "services.services_sold",
                         BigDecimal.valueOf(services));

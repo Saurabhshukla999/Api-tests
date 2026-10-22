@@ -75,11 +75,13 @@ public final class Reports {
         //                       appointment completes - salon 4550 carries
         //                       160,000 of them and none of it is an expense.
         //   service_cogs        qty x the cost snapshotted on the bill line
-        //   total_cost          operating_expenses + service_cogs
+        //   staff_commission    accrued commission on today's paid bills
+        //   total_cost          operating_expenses + service_cogs + staff_commission
+        //                       (measured live 22 Oct 2026: 0 + 3900 + 1300 = 5200)
         //   net_profit          gross_revenue - total_cost
         PROFIT,    List.of("gross_revenue", "net_profit", "tax_collected",
                            "total_discount", "operating_expenses",
-                           "service_cogs", "total_cost"),
+                           "service_cogs", "staff_commission", "total_cost"),
         EXPENSES,  List.of("total_expenses", "expense_count",
                            "avg_daily_expense", "pending_amount"),
         // Reports::AppointmentsQuery#kpis. Worth knowing what each counts:

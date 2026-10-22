@@ -75,7 +75,13 @@ public class Block1EnquiryTest extends BaseJourneyTest {
         assertSameDay(day);
         assertBillIsRefunded(billId);
         expectFullyReversed(before, after, gross(1, 0, ZERO));
-        expectMoved(before, after, "customers.new_customers", ONE);
+        // A visit is "something the customer was charged for" and the profile's
+        // visit count is sourced from bills; a fully refunded bill leaves
+        // total_visits at 0, so it must not create a first-time visitor either.
+        // This is the same "a full refund is no sale" model expectFullyReversed
+        // uses for the money. (The same-day two-visit misclassification is a
+        // separate, genuine API defect - D21.)
+        expectMoved(before, after, "customers.new_customers", ZERO);
     }
 
     @Test(description = "API-E2E-005 a cancelled appointment earns nothing")
@@ -189,10 +195,16 @@ public class Block1EnquiryTest extends BaseJourneyTest {
                         "staff_id", dualStaff))));
 
         JsonPath changed = Steps.readAppointment(appointmentId);
-        assertEquals(changed.getString("data.salon_services[0].service_name"),
+        // GET /appointments/{id} separates the two labels: service_name is the
+        // catalogue name ("Blow Dry") and custom_name is the salon's own label
+        // ("QA Blow Dry"). The calendar list endpoint is the one that promotes
+        // the custom name into service_name, so the SHOW body is asserted on
+        // custom_name.
+        assertEquals(changed.getString("data.salon_services[0].custom_name"),
                      "QA Blow Dry",
             "the appointment still shows "
-          + changed.getString("data.salon_services[0].service_name"));
+          + changed.getString("data.salon_services[0].custom_name")
+          + " (catalogue name " + changed.getString("data.salon_services[0].service_name") + ")");
         assertEquals(changed.getInt("data.salon_services[0].staff_id"), dualStaff,
             "the stylist did not move with the service");
 

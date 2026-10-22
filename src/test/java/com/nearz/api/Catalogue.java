@@ -4,6 +4,7 @@ import io.restassured.path.json.JsonPath;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -39,12 +40,14 @@ public final class Catalogue {
     private static final int SLOTS = 19;
 
     /** Stylists to seed. SLOTS x ROSTER is the salon's bookings-per-DAY limit,
-     *  because today's appointments outlive the run that made them. */
-    private static final int ROSTER = 20;
+     *  because today's appointments outlive the run that made them. Raised from
+     *  20 to 40 on 22 Oct 2026: a full day of reruns had booked all 380 places
+     *  of the original roster, and the API accepts more QA stylists. */
+    private static final int ROSTER = 40;
 
     /** The suite bills against these two by NAME, never by list position. */
     private static final String SERVICE_NAME = "QA Haircut";
-    /** Seeded stylists are named "QA Stylist 1".."QA Stylist 20". Only these are
+    /** Seeded stylists are named "QA Stylist 1".."QA Stylist 40". Only these are
      *  used. Anything else on the salon - a stylist someone duplicated in the
      *  dashboard, say - may not be assigned to our service, and the API refuses
      *  the booking with "X is not assigned to QA Haircut". */
@@ -135,7 +138,10 @@ public final class Catalogue {
         List<Map<String, Object>> days = new ArrayList<>();
         for (int weekday = 0; weekday < 7; weekday++) {
             days.add(Map.of("weekday", weekday, "closed", false,
-                            "start_time", "09:00", "end_time", "21:00"));
+                            "start_time", "09:00", "end_time", "21:00",
+                            // Documented; false keeps the full 09:00-21:00
+                            // window bookable, which the journeys rely on.
+                            "has_break", false));
         }
         given().spec(Api.journey())
                 .pathParam("salonId", salonId)
@@ -219,7 +225,12 @@ public final class Catalogue {
                         "price", price,
                         "duration_in_minutes", 30,
                         "gender", "unisex",
-                        "active", true)))
+                        "active", true,
+                        // Documented, still unfilled: discount (a percentage)
+                        // and description. staff_ids is behavioural - stylists
+                        // are attached by the roster, not here.
+                        "discount", 0,
+                        "description", "QA catalogue service")))
                 .when().post("/salon_services")
                 .then().statusCode(201)
                 .extract().jsonPath().getInt("data.id");
@@ -272,8 +283,25 @@ public final class Catalogue {
         if (all != null) {
             for (Map<String, Object> member : all) {
                 String name = String.valueOf(member.get("name"));
-                if (OURS.matcher(name).matches()) {
-                    ids.add(Integer.parseInt(member.get("id").toString()));
+                if (!OURS.matcher(name).matches()) {
+                    continue;
+                }
+                int id = Integer.parseInt(member.get("id").toString());
+                ids.add(id);
+                // A staff record outlives the service it was created against.
+                // Salon 4550 still carried stylists pointing at service 54645
+                // after QA Haircut had been recreated as 54943, and every
+                // booking on those stylists answered "not assigned to QA
+                // Haircut". Empty service_ids mean unrestricted and are left
+                // alone; a non-empty stale list is re-pointed at today's id.
+                List<Integer> assigned = serviceIdsOf(member);
+                if (!assigned.isEmpty() && !assigned.contains(serviceId)) {
+                    given().spec(Api.journey())
+                            .pathParam("salonId", salonId)
+                            .pathParam("id", id)
+                            .body(Map.of("salon_service_ids", List.of(serviceId)))
+                            .when().put("/salons/{salonId}/staff/{id}")
+                            .then().statusCode(200);
                 }
             }
         }
@@ -369,7 +397,22 @@ public final class Catalogue {
             if (all != null) {
                 for (Map<String, Object> member : all) {
                     if (DUAL_STAFF_NAME.equals(String.valueOf(member.get("name")))) {
-                        secondStaff = Integer.parseInt(member.get("id").toString());
+                        int found = Integer.parseInt(member.get("id").toString());
+                        // Reusing the stylist by name is not enough: the record
+                        // may pre-date QA Blow Dry, or point at an older id for
+                        // it, and then the appointment change is refused with
+                        // "QA Dual Stylist is not assigned to QA Blow Dry".
+                        // Assign both services explicitly before handing it back.
+                        List<Integer> wanted = List.of(serviceId, secondServiceId());
+                        if (!serviceIdsOf(member).containsAll(wanted)) {
+                            given().spec(Api.journey())
+                                    .pathParam("salonId", salonId)
+                                    .pathParam("id", found)
+                                    .body(Map.of("salon_service_ids", wanted))
+                                    .when().put("/salons/{salonId}/staff/{id}")
+                                    .then().statusCode(200);
+                        }
+                        secondStaff = found;
                         return secondStaff;
                     }
                 }
@@ -391,12 +434,26 @@ public final class Catalogue {
         return secondStaff;
     }
 
+    private static List<Integer> serviceIdsOf(Map<String, Object> member) {
+        List<Integer> ids = new ArrayList<>();
+        Object raw = member.get("service_ids");
+        if (raw instanceof List<?> list) {
+            for (Object value : list) {
+                ids.add(Integer.parseInt(String.valueOf(value)));
+            }
+        }
+        return ids;
+    }
+
     public Booking nextFreeSlot() {
         if (takenSlots.isEmpty()) {
             readTodaysCalendar();
         }
         for (int slot = 0; slot < SLOTS; slot++) {
             String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
             for (int staffId : staffIds) {
                 if (unusableStaff.contains(staffId)) {
                     continue;
@@ -416,6 +473,46 @@ public final class Catalogue {
     }
 
     /**
+     * A contiguous block of `count` 30-minute slots on ONE roster stylist.
+     *
+     * Needed when one appointment carries several services: the API sums their
+     * durations and refuses an end time that is too short ("End time must leave
+     * at least 60 minutes for the services booked"). A single-slot Booking would
+     * book two half-hours for the stylist and collide with the next test.
+     */
+    public Booking nextFreeBlock(int count) {
+        if (takenSlots.isEmpty()) {
+            readTodaysCalendar();
+        }
+        for (int slot = 0; slot + count <= SLOTS; slot++) {
+            String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
+            for (int staffId : staffIds) {
+                if (unusableStaff.contains(staffId)) {
+                    continue;
+                }
+                boolean free = true;
+                for (int i = 0; i < count; i++) {
+                    if (takenSlots.contains(staffId + "@" + startOf(slot + i))) {
+                        free = false;
+                        break;
+                    }
+                }
+                if (free) {
+                    for (int i = 0; i < count; i++) {
+                        takenSlots.add(staffId + "@" + startOf(slot + i));
+                    }
+                    return new Booking(start, endOf(slot + count - 1), staffId);
+                }
+            }
+        }
+        throw new IllegalStateException(
+            "no free " + count + "-slot block remains today for any roster stylist.");
+    }
+
+    /**
      * The next free slot for ONE named stylist.
      *
      * nextFreeSlot() only ever offers roster stylists, so the dual-assigned
@@ -430,6 +527,9 @@ public final class Catalogue {
         }
         for (int slot = 0; slot < SLOTS; slot++) {
             String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
             if (takenSlots.add(staffId + "@" + start)) {
                 return new Booking(start, endOf(slot), staffId);
             }
@@ -477,9 +577,24 @@ public final class Catalogue {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> staff = (Map<String, Object>) item.get("staff");
                     Object start = item.get("start_time");
-                    if (staff != null && staff.get("id") != null && start != null) {
+                    Object end = item.get("end_time");
+                    if (staff == null || staff.get("id") == null || start == null) {
+                        continue;
+                    }
+                    // Mark EVERY half-hour the appointment occupies, not just its
+                    // start. A second service or a longer treatment can run past
+                    // the next slot, and a start-only map would offer that slot
+                    // again and collect "already has a booking".
+                    LocalTime from = LocalTime.parse(start.toString().substring(0, 5));
+                    LocalTime to = end == null
+                            ? from.plusMinutes(30)
+                            : LocalTime.parse(end.toString().substring(0, 5));
+                    if (!to.isAfter(from)) {
+                        to = from.plusMinutes(30);
+                    }
+                    for (LocalTime at = from; at.isBefore(to); at = at.plusMinutes(30)) {
                         takenSlots.add(staff.get("id") + "@"
-                                     + start.toString().substring(0, 5));
+                                     + String.format("%02d:%02d", at.getHour(), at.getMinute()));
                     }
                 }
             }
@@ -492,6 +607,19 @@ public final class Catalogue {
 
     private static String startOf(int slot) {
         return String.format("%02d:%02d", FIRST_HOUR + slot / 2, 30 * (slot % 2));
+    }
+
+    /**
+     * A slot that has already started is not bookable.
+     *
+     * The API auto-completes an appointment whose time has passed, so a test
+     * that books 10:00 at 10:22 receives a COMPLETED appointment and every
+     * later status change is refused with "Status cannot be changed once the
+     * appointment is completed". The one-minute margin covers the round trip
+     * between choosing a slot and the server stamping it.
+     */
+    private static boolean bookable(String start) {
+        return LocalTime.parse(start).isAfter(LocalTime.now().plusMinutes(1));
     }
 
     private static String endOf(int slot) {

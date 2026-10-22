@@ -1,6 +1,7 @@
 package com.nearz.api;
 
 import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,9 +10,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.startsWith;
+import static org.testng.Assert.assertEquals;
 
 /**
  * One method per business action. Each returns the id the next step needs.
@@ -23,8 +27,6 @@ import static io.restassured.RestAssured.given;
  */
 public final class Steps {
 
-    private static final AtomicInteger COUNTER = new AtomicInteger();
-
     private Steps() { }
 
     /**
@@ -34,20 +36,57 @@ public final class Steps {
      * customer instead of creating one - which silently breaks every
      * new-customer assertion downstream. Both learned the hard way.
      */
+    /**
+     * A fresh customer mobile for every call.
+     *
+     * This used to derive digits from the current millisecond inside a
+     * 100-second window plus the call counter. Two runs that reached the same
+     * test at the same point in that window produced the SAME phone, so the
+     * enquiry converted onto yesterday's customer and every first-time-visitor
+     * assertion downstream silently measured the wrong thing. Random keeps the
+     * value 10 digits and starting with 9 while making a cross-run collision
+     * effectively impossible.
+     */
     public static String newPhone() {
-        int n = COUNTER.incrementAndGet();
-        long tail = (System.currentTimeMillis() % 1_000_00L) * 10 + (n % 10);
-        return "9" + String.format("%09d", tail % 1_000_000_000L);
+        long tail = java.util.concurrent.ThreadLocalRandom.current()
+                .nextLong(1_000_000_000L);
+        String digits = String.format("%09d", tail);
+        // The live normaliser treats a leading "91" as the India trunk prefix
+        // even on a 10-digit number and stores only the last 8 digits
+        // (9100955749 -> 00955749). That is an API defect, recorded separately;
+        // the suite's job is not to trip over it on every tenth customer.
+        if (digits.charAt(0) == '1') {
+            digits = "2" + digits.substring(1);
+        }
+        return "9" + digits;
     }
 
     // -----------------------------------------------------------------------
+    /**
+     * Log an enquiry.
+     *
+     * Swagger documents source, notes and follow_up_date alongside the two
+     * required fields, and the 201 body echoes them back as the Enquiry
+     * resource - so they are sent and read back here rather than left to a
+     * separate test. lead_source_id and assigned_to_id are also documented but
+     * are not sent: they need a lookup and a staff id, and both exist in the
+     * matrix in docs/SWAGGER_KEY_MATRIX.md as deliberately unexercised.
+     */
     public static int createEnquiry(String salonId, String name, String phone) {
+        String notes = "QA enquiry " + System.currentTimeMillis();
+        String followUp = LocalDate.now().plusDays(2).toString();
         return given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .body(Map.of("enquiry", Map.of(
-                        "name", name, "phone", phone, "interest", "QA Haircut")))
+                        "name", name, "phone", phone, "interest", "QA Haircut",
+                        "source", "Walk-in", "notes", notes,
+                        "follow_up_date", followUp)))
                 .when().post("/salons/{salonId}/enquiries")
-                .then().statusCode(201)
+                .then()
+                .statusCode(201)
+                .body("data.source", equalTo("Walk-in"))
+                .body("data.notes", equalTo(notes))
+                .body("data.follow_up_date", startsWith(followUp))
                 .extract().jsonPath().getInt("data.id");
     }
 
@@ -63,7 +102,10 @@ public final class Steps {
         return given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .body(Map.of("enquiry", Map.of(
-                        "name", name, "phone", phone, "interest", "QA Haircut")))
+                        "name", name, "phone", phone, "interest", "QA Haircut",
+                        "source", "Walk-in",
+                        "notes", "QA duplicate-probe enquiry",
+                        "follow_up_date", LocalDate.now().plusDays(2).toString())))
                 .when().post("/salons/{salonId}/enquiries")
                 .then().extract().statusCode();
     }
@@ -79,13 +121,17 @@ public final class Steps {
 
     /** Returns the salon_customer_profile id the enquiry became. */
     public static int convertEnquiry(String salonId, int enquiryId) {
-        return given().spec(Api.journey())
+        io.restassured.response.Response response = given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .pathParam("id", enquiryId)
                 .body(Map.of())
-                .when().post("/salons/{salonId}/enquiries/{id}/convert")
-                .then().statusCode(200)
-                .extract().jsonPath().getInt("data.customer_profile.id");
+                .when().post("/salons/{salonId}/enquiries/{id}/convert");
+        if (response.statusCode() != 200) {
+            throw new AssertionError(
+                "converting enquiry " + enquiryId + " answered "
+              + response.statusCode() + ": " + redacted(response));
+        }
+        return response.jsonPath().getInt("data.customer_profile.id");
     }
 
     /**
@@ -107,19 +153,22 @@ public final class Steps {
             Catalogue.Booking slot = catalogue.nextFreeSlot();
             io.restassured.response.Response response = given().spec(Api.journey())
                     .body(Map.of(
-                            "appointment", Map.of(
-                                    "salon_id", Integer.parseInt(salonId),
-                                    "date", LocalDate.now().toString(),
-                                    "start_time", slot.start(),
-                                    "end_time", slot.end(),
-                                    "on_behalf_of_mobile_no", customerPhone,
-                                    "on_behalf_of_username", customerName,
-                                    "comment", "Walk-in customer from enquiry, appointment recorded after service started",
-                                    "booking_source", "walk_in",
-                                    "customer_id", customerId,
-                                    "appointment_services_attributes", List.of(Map.of(
+                            "appointment", Map.ofEntries(
+                                    Map.entry("salon_id", Integer.parseInt(salonId)),
+                                    Map.entry("date", LocalDate.now().toString()),
+                                    Map.entry("start_time", slot.start()),
+                                    Map.entry("end_time", slot.end()),
+                                    Map.entry("on_behalf_of_mobile_no", customerPhone),
+                                    Map.entry("on_behalf_of_username", customerName),
+                                    Map.entry("comment", "Walk-in customer from enquiry, appointment recorded after service started"),
+                                    Map.entry("booking_source", "walk_in"),
+                                    Map.entry("customer_id", customerId),
+                                    // Documented on POST /appointments; 0 keeps the
+                                    // journey's money expectations untouched.
+                                    Map.entry("discount", 0),
+                                    Map.entry("appointment_services_attributes", List.of(Map.of(
                                             "salon_service_id", catalogue.serviceId,
-                                            "staff_id", slot.staffId())))))
+                                            "staff_id", slot.staffId()))))))
                     .when().post("/appointments");
 
             if (response.statusCode() == 200) {
@@ -136,7 +185,7 @@ public final class Steps {
             throw new AssertionError(
                 "booking an appointment failed with " + response.statusCode()
               + " at " + slot.start() + " for stylist " + slot.staffId()
-              + "\n  " + body);
+              + "\n  " + redacted(body));
         }
         throw new IllegalStateException(
             "could not find a free slot after 25 attempts on " + LocalDate.now()
@@ -164,6 +213,8 @@ public final class Steps {
         appointment.put("on_behalf_of_username", name);
         appointment.put("comment", "Walk-in customer from enquiry, appointment recorded after service started");
         appointment.put("booking_source", "walk_in");
+        // Documented key; 0 leaves the line pricing exactly as the caller set it.
+        appointment.put("discount", 0);
         appointment.put("appointment_services_attributes", lines);
         return given().spec(Api.journey())
                 .body(Map.of("appointment", appointment))
@@ -256,18 +307,35 @@ public final class Steps {
             throw new AssertionError(
                 "PATCH /appointments/" + appointmentId + " was refused with "
               + response.statusCode() + "\n  sent: " + changes
-              + "\n  got:  " + response.asString());
+              + "\n  got:  " + redacted(response));
         }
         return response.jsonPath();
     }
 
     /** status is one of: pending confirmed arrived started completed no_show cancelled */
     public static void setAppointmentStatus(int appointmentId, String status) {
-        given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .pathParam("id", appointmentId)
                 .body(Map.of("status", status))
                 .when().patch("/appointments/{id}/status")
-                .then().statusCode(200);
+                .then().extract().response();
+        if (response.statusCode() != 200) {
+            throw new AssertionError(
+                "PATCH /appointments/" + appointmentId + "/status -> " + status
+              + " was refused with " + response.statusCode()
+              + "\n  response: " + redacted(response));
+        }
+    }
+
+    /** Response text with the refreshed JWT removed - logs are not a secret store. */
+    public static String redacted(Response response) {
+        return redacted(response.asString());
+    }
+
+    /** Same redaction for callers that only kept the body string. */
+    public static String redacted(String body) {
+        return body.replaceAll(
+            "\"token\"\\s*:\\s*\"[^\"]*\"", "\"token\":\"<redacted>\"");
     }
 
     /** Raise a draft bill. Returns the bill id. */
@@ -333,14 +401,31 @@ public final class Steps {
             body.put("discount", Map.of("pct", discountPct, "flat", 0));
         }
         if (gstEnabled != null) {
-            body.put("tax", Map.of("gst_enabled", gstEnabled));
+            Map<String, Object> tax = new LinkedHashMap<>();
+            tax.put("gst_enabled", gstEnabled);
+            if (!gstEnabled) {
+                // Live API (22 Oct 2026) refuses a GST-off bill with
+                // "Give a reason for switching GST off on this bill" unless the
+                // tax block carries a reason. The swagger tax schema lists only
+                // gst_enabled and mode, so this is documented as drift in
+                // docs/DEFECTS.md (SW-9) while the test follows the API.
+                tax.put("reason", "QA journey: GST disabled for this bill");
+            }
+            body.put("tax", tax);
         }
 
-        return given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .body(body)
                 .when().post("/api/v1/billing/bills")
-                .then().statusCode(201)
-                .extract().jsonPath().getInt("data.id");
+                .then().extract().response();
+        if (response.statusCode() != 201) {
+            throw new AssertionError(
+                "POST /api/v1/billing/bills was refused with "
+              + response.statusCode()
+              + "\n  sent: " + body
+              + "\n  response: " + redacted(response));
+        }
+        return response.jsonPath().getInt("data.id");
     }
 
     // -----------------------------------------------------------------------
@@ -471,12 +556,21 @@ public final class Steps {
      */
     public static int createStaff(String salonId, String name, String commissionType,
                                   Object commissionValue, List<Integer> serviceIds) {
+        String phone = newPhone();
+        String email = "qa" + phone + "@example.test";
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", name);
-        body.put("phone", newPhone());
+        body.put("phone", phone);
+        // Documented by StaffWrite. Email is unique per salon, so it is derived
+        // from the unique phone; weekly_off is empty because the roster books
+        // seven days a week (Catalogue.openEveryDay).
+        body.put("email", email);
         body.put("job_title", "Beautician");
+        body.put("experience_years", 3);
         body.put("shift_start", "09:00");
         body.put("shift_end", "21:00");
+        body.put("weekly_off", List.of());
+        body.put("status", "active");
         body.put("commission_type", commissionType);
         if (commissionValue != null) {
             body.put("commission_value", commissionValue);
@@ -486,7 +580,12 @@ public final class Steps {
         return given().spec(Api.journey())
                 .pathParam("salonId", salonId).body(body)
                 .when().post("/salons/{salonId}/staff")
-                .then().statusCode(201)
+                .then()
+                .statusCode(201)
+                .body("data.email", equalTo(email))
+                .body("data.experience_years", equalTo(3))
+                .body("data.status", equalTo("active"))
+                .body("data.weekly_off", hasSize(0))
                 .extract().jsonPath().getInt("data.id");
     }
 
@@ -608,12 +707,22 @@ public final class Steps {
         entry.put("status", status);
         if (checkIn != null)  { entry.put("check_in", checkIn); }
         if (checkOut != null) { entry.put("check_out", checkOut); }
+        // Documented on the upsert and returned on AttendanceEntry.
+        entry.put("notes", "QA attendance");
 
-        return given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .body(Map.of("attendance", entry))
                 .when().put("/salons/{salonId}/attendance/entries")
-                .then().extract().statusCode();
+                .then().extract().response();
+
+        // A refusal (present without check_in) is a legitimate answer here, so
+        // the body is only read when the upsert actually saved.
+        if (response.statusCode() == 200 || response.statusCode() == 201) {
+            assertEquals(response.jsonPath().getString("data.notes"), "QA attendance",
+                "the attendance entry did not keep the documented notes field");
+        }
+        return response.statusCode();
     }
 
     /** Today's attendance board: data.summary counts plus a roster row each. */
@@ -916,8 +1025,24 @@ public final class Steps {
     }
 
     /** Is this product on the dashboard's low-stock list, and how badly? */
-    public static String lowStockSeverity(JsonPath inventory, int productId) {
-        List<Map<String, Object>> rows = inventory.getList("data.low_stock");
+    /**
+     * Severity of a product on the FULL low-stock list.
+     *
+     * The inventory tab's `data.low_stock` array is a 10-row preview sorted by
+     * stock; a product at 9 against a reorder level of 9 falls outside it while
+     * `data.summary.low_stock` counts it (21 live on 22 Oct 2026, list 10).
+     * The Action Center endpoint is the complete list and the one that agrees
+     * with the count (SW-12).
+     */
+    public static String lowStockSeverity(String salonId, int productId) {
+        JsonPath list = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("per_page", 200)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/dashboard/action_center/low_stock")
+                .then().statusCode(200)
+                .extract().jsonPath();
+        List<Map<String, Object>> rows = list.getList("data.items");
         if (rows == null) {
             return null;
         }

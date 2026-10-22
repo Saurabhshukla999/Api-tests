@@ -82,9 +82,10 @@ public class VerifyDefectsTest extends BaseJourneyTest {
                 .when().get("/appointments/99999999");
 
         boolean billIs200 = bill.statusCode() == 200;
+        String billBody = Steps.redacted(bill.asString());
         verdict("D1  404 served as 200", billIs200,
             "GET a nonexistent BILL  -> " + bill.statusCode()
-          + "  body starts: " + bill.asString().substring(0, Math.min(60, bill.asString().length()))
+          + "  body starts: " + billBody.substring(0, Math.min(60, billBody.length()))
           + "\n    GET a nonexistent APPOINTMENT -> " + appt.statusCode()
           + "   (measured 404 on 30 Aug, so this defect is endpoint-specific)");
     }

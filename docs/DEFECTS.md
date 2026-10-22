@@ -33,7 +33,7 @@ still-open defect cannot hide the other twelve.
 | **D15** DELETE product 500s | **STILL PRESENT** | first DELETE **500**, second **404** — it deleted anyway |
 | **D17** 60s report cache | **STILL PRESENT** | 11s after a booking: dashboard read 90, cache-busted read **91** |
 | **Finding A** staff revenue counts products | **STILL PRESENT** | a 1,000 service + 200 product moved staff service revenue by **1,416**, not 1,180 |
-| **Finding C** refund keeps its discount | **STILL PRESENT** | revenue reversed to **0**, discount stayed at **+100** |
+| **Finding C** refund reverses its discount | **CHANGED 22 Oct 2026** | on 7 Sep a full refund left the discount at **+100**; on 22 Oct `sales.total_discount` and `profit.total_discount` stayed unchanged while the bill still carries its **100** discount - the refund now reverses it |
 | **Finding D** SHOW omits the user | **STILL PRESENT** | `GET /appointments/{id}` → `data.user` absent |
 | **D4** unparseable date | **PARTLY FIXED** | `date="not-a-date"` now answers **400**, not a silent empty list. The blank-date half (D3) still returns 200. |
 | **D1** 404 served as 200 | ~~NOT REPRODUCED~~ → **STILL PRESENT** | *Narrowed 7 Sep.* Bills and appointments do answer 404, but the sweep this row asked for found `staffs#show` and `products#show` still answering **200 + `{"error":"not_found"}`** — the latter for a product that exists. See D1 below. |
@@ -45,6 +45,10 @@ still-open defect cannot hide the other twelve.
 | | verdict | evidence |
 |---|---|---|
 | **D19** refund keeps COGS booked | **OPEN** | sale +200 revenue / +100 COGS; full refund reversed the revenue and returned the stock, COGS **stayed at +100** — net profit permanently 100 short |
+| **D20** refunded bills stay in `bills_count` | **OPEN** | today's sales report: 17 rows = 14 paid + 3 refunded, and `bills_count` = **17**; the spec says fully refunded bills are excluded |
+| **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
+| **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
+| **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 
@@ -276,9 +280,16 @@ user block at all. A rename read back with a follow-up GET always looks like
 report a working feature as broken. API-E2E-009 reads the PATCH response
 instead.
 
-**Finding C — a fully refunded bill keeps its discount.** A ₹1,000 service at
-10% off, paid then fully refunded, moves Sales revenue by ₹0 and Sales discount
-by **+₹100**. Profit then reports ₹0 revenue alongside ₹100 of discount given.
+**Finding C — a fully refunded bill's discount (behaviour changed 22 Oct 2026).**
+On 7 Sep 2026 a 1,000 service at 10% off, paid then fully refunded, moved Sales
+revenue by 0 but Sales discount by **+100**: Profit then reported 0 revenue
+alongside 100 of discount given. On 22 Oct 2026 the same journey
+(`Block3RefundTest#e2e117`) found the bill record still carrying its **100**
+discount and its 1,062 collected/refunded; the settlement had added the 100 to
+both discount totals and the refund brought them back to **1,930** - the refund
+now reverses the discount as well as the revenue. That is the consistent ledger,
+so the test was updated to check all three points: +100 on settlement, 0 after
+the refund, and the bill record still carrying its discount.
 
 ---
 
@@ -386,6 +397,9 @@ request body is rejected by the endpoint that documents it.
 - `POST /appointments` accepts no `customer_id`. The only customer handle is
   `on_behalf_of_mobile_no`, so the enquiry → customer → appointment link is a
   phone number, not an id.
+  **Corrected 22 Oct 2026:** `customer_id` IS accepted for a converted enquiry -
+  tests now send it, and `on_behalf_of_mobile_no` remains the walk-in handle.
+  The swagger spec still omits the key; see **SW-4** below.
 
 ---
 
@@ -406,3 +420,150 @@ Not everything was broken. These were checked and hold:
   a token; a self-signed token claiming `role: admin` was refused.
 - **Tenant isolation on path-scoped routes** — 240 of 244 passing. The four
   failures are D9.
+
+---
+
+## Swagger documentation drift (22 Oct 2026)
+
+Found while matching the existing Java tests against
+`api-service/swagger/v1/*.json` (13 files, 209 operations / 176 endpoints).
+These are **spec defects, not API defects**: the suite follows observed live
+behaviour and the drift is recorded here so the spec can be corrected. Full
+comparison: `docs/SWAGGER_KEY_MATRIX.md`.
+
+| id | The spec says | The API does | Evidence |
+|---|---|---|---|
+| **SW-1** | `POST /salons/{salon_id}/expense` and `PUT/PATCH/DELETE /salons/{salon_id}/expense/{id}` | `POST /expenses`, `PUT/DELETE /expenses/{id}` work; the salon-scoped write route answers 404 and the salon comes from the token | `Block7InventoryTest` line 480, `Block8ExpenseTest` line 27, `Steps.createExpense` |
+| **SW-2** | `PUT /salons/{salon_id}/settings` | `PATCH` is accepted and is what the round-off toggle uses | `Steps.setRoundOff` |
+| **SW-3** | bill line price key is `price` | `unit_price` is what the API prices from | every `createBill` helper, and the totals assertions agree with the catalogue price, not with `price` |
+| **SW-4** | `POST /appointments` has no `customer_id` | `customer_id` is accepted and links the appointment to the converted enquiry | `Steps.bookAppointment`, added 22 Oct |
+| **SW-5** | no `/services` operation in `v1/` | `GET /services` returns the master catalogue; its id is the `service_id` that `POST /salon_services` requires | `Catalogue.masterServiceId` |
+| **SW-6** | `PUT /appointments/{id}` updates the booking | `PATCH /appointments/{id}` performs the update | `Steps.attemptAppointmentChange`, `Steps.changeAppointment` |
+| **SW-7** | `PATCH /api/v1/billing/bills/{id}` replaces a draft basket | `PUT /api/v1/billing/bills/{id}` performs the replacement | `Steps.updateBillItems` |
+| **SW-8** | `sales.service_revenue` is GST-included and `service_revenue + product_revenue = total_revenue` | `service_revenue` is **before GST**; the live tile is labelled "Service Revenue (before GST)" and `service + product + gst = total` (measured: 13,900 + 200 + 2,538 = 16,638) | `BaseJourneyTest.expectSettled` now asserts the net figure; `Block1EnquiryTest#e2e001` |
+| **SW-9** | bill `tax` accepts `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is present; the key is undocumented | `Steps.createBill`, `Block1EnquiryTest#e2e014` |
+| **SW-10** | appointment SHOW `service_name` "falls back to the catalogue name when the salon has not set a custom name" | SHOW always returns the **catalogue** name in `service_name` and the salon's label in `custom_name` (`Blow Dry` / `QA Blow Dry`); the calendar list promotes the custom name into `service_name` | `Block1EnquiryTest#e2e008` now asserts `custom_name` |
+| **SW-11** | the profit summary is "Revenue minus cost of goods and operating expenses", and `total_cost` is described only as "Total Cost" | `total_cost` also includes **`staff_commission`**: live today `0 opex + 3,900 COGS + 1,300 commission = 5,200`, and `net_profit = gross - total_cost`. The stated formula is short by the commission | `Reports.PROFIT` now reads `staff_commission`; `Block8ExpenseTest.assertIdentityHolds` asserts all three terms |
+| **SW-12** | the inventory tab's `low_stock` array and `summary.low_stock` share "identical definition ... so the KPI and the rows can never disagree"; no cap is documented | the array is a **10-row preview** (sorted by stock) while the KPI counts every product at or below reorder (21 live). The complete list is `/dashboard/action_center/low_stock`; a product at 9 vs reorder 9 is in the full list but outside the preview | `Steps.lowStockSeverity` reads the action-center list; `Block9DashboardTest#e2e182` asserts the KPI delta |
+
+Response-schema gaps that block assertions (not request alignment):
+
+- `POST /salon_services` 201 is `schema: {type: object}` - no fields documented,
+  so the documented request keys `gender`, `duration_in_minutes`, `discount` and
+  `description` cannot be asserted on the create response.
+- `POST /api/v1/billing/bills` 201 carries no documented body schema; the suite
+  asserts the id and then the money through report deltas rather than fields.
+
+---
+
+## Found 22 October 2026 (Block 1 against the live journey tenant)
+
+These three were found in the same serialized rerun and are **API behaviour**,
+not test defects. The assertions stay as they are, so the affected journeys keep
+failing until the API changes; the rest of the block proceeds.
+
+### D20 — a fully refunded bill is still counted in `sales.bills_count`
+
+The spec is explicit (`reports.json`, Sales summary):
+
+> `bills_count` — "Bills raised in this period, after refunds. A fully refunded
+> bill is excluded here."
+
+Live, on salon 4550 with `range=today`:
+
+```
+GET /salons/4550/reports/sales/rows?range=today&per_page=100
+  17 rows: 14 paid + 3 refunded
+GET /salons/4550/reports/sales/summary?range=today
+  bills_count = 17
+```
+
+So the refunded rows are not excluded. `Block1EnquiryTest#e2e020` raises a
+bill, fully refunds it, then raises and settles a second one; the test expects
+`bills_count` to move by **1** and it moves by **2**. Revenue, payments,
+discounts and refund totals all reverse correctly — only the count is wrong.
+
+It is also the only failure left in Block 10. On the second full run of
+22 Oct 2026, four composite journeys each created a bill, refunded it, and then
+did more trade; every one saw `bills_count` include the refunded bill:
+
+| case | expected movement | actual movement | `bills_count` |
+|---|---|---|---|
+| `e2e192_threeSalesOneRefund` | +2 | +3 | 264 → 267 |
+| `e2e193_discountedBasketRefundedAndRebought` | +1 | +2 | 267 → 269 |
+| `e2e194_fourStatesReconcile` | +2 | +3 | 269 → 272 |
+| `e2e200_theWholeSystem` | +1 | +2 | 296 → 298 |
+
+The same cases failed the same way on the first run (215 → 218, 218 → 220,
+220 → 223, 245 → 247), so this is not an artefact of one run.
+
+Block 3 repeats it for a refund-then-trade-again journey:
+`e2e120_refundThenBuyAgain` expected +1 and saw +2 (376 → 378), and
+`e2e125_settleRefundSellAgain` expected +1 and saw +2 (383 → 385) on the
+22 Oct 2026 rerun. The first Block 3 run saw the same shifts (339 → 341 and
+346 → 348). These two are the only failures left in that block.
+
+### D21 — "First-Time Visitors" only counts customers with exactly one visit
+
+Swagger (`reports.json`, Customers summary):
+
+> `new_customers` — "Customers who visited in this window and had never visited
+> before it."
+
+Live, today:
+
+```
+new_customers              = 12
+returning_customers        = 3
+new_customers_in_range     = 27   (records created today)
+```
+
+The three "returning" customers are exactly the three customers who have **two
+completed visits today** (customer ids 3959, 3978, 3966). The 27 records created
+today split 12 with one visit, 12 with none and 3 with two — there is no
+customer whose first visit predates the window. A brand-new customer billed
+twice in one day is therefore reported as returning, contradicting "had never
+visited before it".
+
+A fully refunded sale is correctly treated as **no visit**: the customer profile
+documents a visit as "something the customer was charged for", counted from
+bills, and the customer from `e2e004` (id 3977, one completed appointment and a
+fully refunded bill) has `total_visits = 0`. `e2e004` was asserting the
+opposite and has been corrected to expect no movement; the two-visit case is a
+straight contradiction of the documented definition and remains red.
+
+### D22 — a valid 10-digit phone beginning `91` is truncated to 8 digits
+
+`Steps.newPhone()` generated `9100955749` for `e2e009`. The enquiry was created
+with that number, but the converted customer profile returned:
+
+```
+expected 9100955749
+actual   00955749
+```
+
+The staff-phone documentation says a leading `91`/`0` trunk prefix is dropped
+when it precedes a 10-digit national number (`+91 98765 43210` → `9876543210`).
+Here the **whole number is already 10 digits**, and stripping `91` leaves 8 —
+so a legitimate local mobile is corrupted. The generator now avoids the `91`
+prefix so the journey can test the customer-rename join rather than this
+normaliser; the API defect remains.
+
+### D23 — enquiry conversion can answer 422 after creating the customer
+
+On the first Block 10 run, the eighth enquiry conversion in
+`e2e198_tenTransactions` answered **422**. The customer profile was nevertheless
+created:
+
+```
+enquiry 3536  phone 9502686662  status "new" (list, stale)
+customer 4229  name "QA E2E-198 #8"  phone 9502686662   (search)
+POST /salons/4550/enquiries/3536/convert  ->  409
+  {"error":"enquiry is already converted"}
+```
+
+The retry was not blind: the customer was looked up first and found, so the
+write had succeeded. The test passed on two later runs, so this is recorded as
+an observed response/write split rather than a reproducible failure.
+`Steps.convertEnquiry` now throws with the redacted response body, so the next
+occurrence carries the reason instead of only the status code.
