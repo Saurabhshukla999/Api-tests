@@ -33,7 +33,7 @@ still-open defect cannot hide the other twelve.
 | **D15** DELETE product 500s | **STILL PRESENT** | first DELETE **500**, second **404** — it deleted anyway |
 | **D17** 60s report cache | **STILL PRESENT** | 11s after a booking: dashboard read 90, cache-busted read **91** |
 | **Finding A** staff revenue counts products | **STILL PRESENT** | a 1,000 service + 200 product moved staff service revenue by **1,416**, not 1,180 |
-| **Finding C** refund keeps its discount | **STILL PRESENT** | revenue reversed to **0**, discount stayed at **+100** |
+| **Finding C** refund reverses its discount | **CHANGED 22 Oct 2026** | on 7 Sep a full refund left the discount at **+100**; on 22 Oct `sales.total_discount` and `profit.total_discount` stayed unchanged while the bill still carries its **100** discount - the refund now reverses it |
 | **Finding D** SHOW omits the user | **STILL PRESENT** | `GET /appointments/{id}` → `data.user` absent |
 | **D4** unparseable date | **PARTLY FIXED** | `date="not-a-date"` now answers **400**, not a silent empty list. The blank-date half (D3) still returns 200. |
 | **D1** 404 served as 200 | ~~NOT REPRODUCED~~ → **STILL PRESENT** | *Narrowed 7 Sep.* Bills and appointments do answer 404, but the sweep this row asked for found `staffs#show` and `products#show` still answering **200 + `{"error":"not_found"}`** — the latter for a product that exists. See D1 below. |
@@ -280,9 +280,16 @@ user block at all. A rename read back with a follow-up GET always looks like
 report a working feature as broken. API-E2E-009 reads the PATCH response
 instead.
 
-**Finding C — a fully refunded bill keeps its discount.** A ₹1,000 service at
-10% off, paid then fully refunded, moves Sales revenue by ₹0 and Sales discount
-by **+₹100**. Profit then reports ₹0 revenue alongside ₹100 of discount given.
+**Finding C — a fully refunded bill's discount (behaviour changed 22 Oct 2026).**
+On 7 Sep 2026 a 1,000 service at 10% off, paid then fully refunded, moved Sales
+revenue by 0 but Sales discount by **+100**: Profit then reported 0 revenue
+alongside 100 of discount given. On 22 Oct 2026 the same journey
+(`Block3RefundTest#e2e117`) found the bill record still carrying its **100**
+discount and its 1,062 collected/refunded; the settlement had added the 100 to
+both discount totals and the refund brought them back to **1,930** - the refund
+now reverses the discount as well as the revenue. That is the consistent ledger,
+so the test was updated to check all three points: +100 on settlement, 0 after
+the refund, and the bill record still carrying its discount.
 
 ---
 
@@ -489,6 +496,12 @@ did more trade; every one saw `bills_count` include the refunded bill:
 
 The same cases failed the same way on the first run (215 → 218, 218 → 220,
 220 → 223, 245 → 247), so this is not an artefact of one run.
+
+Block 3 repeats it for a refund-then-trade-again journey:
+`e2e120_refundThenBuyAgain` expected +1 and saw +2 (376 → 378), and
+`e2e125_settleRefundSellAgain` expected +1 and saw +2 (383 → 385) on the
+22 Oct 2026 rerun. The first Block 3 run saw the same shifts (339 → 341 and
+346 → 348). These two are the only failures left in that block.
 
 ### D21 — "First-Time Visitors" only counts customers with exactly one visit
 

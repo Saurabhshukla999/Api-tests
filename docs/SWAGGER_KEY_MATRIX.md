@@ -86,7 +86,7 @@ Response-schema gaps that limit assertion, not request alignment:
 - `mvn -B -DskipTests clean test-compile` - BUILD SUCCESS, 20 test sources.
 - `ProductCrudTest` - **7/7 pass** live, including the dedicated `sku` /
   `status` / `linked_service_ids` case.
-- `Block1EnquiryTest` - **22 run: 18 pass, 3 fail, 1 skip** on 22 Oct 2026
+- `Block1EnquiryTest` - **22 run: 19 pass, 2 fail, 1 skip** on 22 Oct 2026
   (salon 4550, serialized). `e2e004` was a test-model error and passes after
   correction; the two remaining reds are genuine API defects **D20**
   (`bills_count` keeps refunded bills) and **D21** (two same-day visits make a
@@ -101,3 +101,13 @@ Response-schema gaps that limit assertion, not request alignment:
   (attendance check-in vs rostered shift; dashboard gross revenue vs the Sales
   report's net split) and two suites needed data repairs (stale staff service
   bindings, staff rows filtered by `staff_id`).
+- Blocks 2-3 ran last: **50 run, 31 pass, 2 known failures, 17 documented
+  skips**. Both failures are D20 (`e2e120`, `e2e125`). Block 2's first run had
+  a one-off 0.02 Profit drift on `e2e084` that passed alone and on the rerun
+  (watch item, not a defect). `e2e117` was updated after the API began
+  reversing a fully refunded bill's discount (Finding C).
+- Suite total: **202 run, 173 pass, 8 known failures (7 x D20, 1 x D21),
+  21 documented skips**.
+- `Catalogue.ROSTER` was raised 20 -> 40 after the day filled all 380
+  appointment places; the API accepted the extra QA stylists. This is test
+  infrastructure, not an API change.
