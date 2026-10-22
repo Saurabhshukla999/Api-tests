@@ -71,6 +71,7 @@ the drift is recorded in `docs/DEFECTS.md` as SW-1..SW-10.
 | SW-9 | bill `tax` documents `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is sent |
 | SW-10 | appointment SHOW `service_name` uses the custom name when one is set | SHOW returns the **catalogue** name in `service_name` and the salon label in `custom_name`; the calendar list puts the custom name in `service_name` |
 | SW-11 | profit summary: "Revenue minus cost of goods and operating expenses"; `total_cost` = "Total Cost" | `total_cost` = opex + COGS + **staff_commission** (0 + 3,900 + 1,300 = 5,200 today); `net_profit = gross - total_cost`. The stated formula omits commission |
+| SW-12 | inventory tab: the `low_stock` array and the KPI have an "identical definition ... so the KPI and the rows can never disagree"; no cap documented | `low_stock` is a **10-row preview** sorted by stock; `summary.low_stock` counts all (21 today). The full list is the action-center endpoint |
 
 Response-schema gaps that limit assertion, not request alignment:
 
@@ -91,5 +92,11 @@ Response-schema gaps that limit assertion, not request alignment:
   (`bills_count` keeps refunded bills) and **D21** (two same-day visits make a
   first-time customer "returning"). They are left red on purpose.
 - The live run also produced SW-8 (`service_revenue` net of GST), SW-9
-  (`tax.reason` required) and SW-10 (SHOW `custom_name`), all now reflected in
-  the request/response rows above.
+  (`tax.reason` required), SW-10 (SHOW `custom_name`), SW-11 (`total_cost`
+  includes commission) and SW-12 (inventory low-stock preview), all now
+  reflected in the request/response rows above.
+- Blocks 4-9 ran next, one class at a time: **108 run, 105 pass, 0 fail,
+  3 documented skips**. Two test-side basis errors were fixed (attendance
+  check-in vs rostered shift; dashboard gross revenue vs the Sales report's net
+  split) and two suites needed data repairs (stale staff service bindings,
+  staff rows filtered by `staff_id`).

@@ -102,6 +102,7 @@ Material deviations:
 | `mvn test -Dtest=Block6StaffTest -DexcludedGroups=known-defect` | **25 run: 25 pass, 0 fail** | Attendance status is derived from `check_in` against the rostered shift: a 10:00 check-in on a 09:00 shift comes back `late`, so the journeys check in at 09:00. First run had three attendance failures from that assumption, fixed and re-verified 3/3 before the full rerun. |
 | `mvn test -Dtest=Block7InventoryTest -DexcludedGroups=known-defect` | **19 run: 19 pass, 0 fail** | Green on the first run. `e2e168` (refund should reverse COGS - D19) is in the known-defect group and excluded. |
 | `mvn test -Dtest=Block8ExpenseTest -DexcludedGroups=known-defect` | **10 run: 10 pass, 0 fail** | Green after the P&L identity was completed: `total_cost` also carries `staff_commission` (SW-11). First run's two identity failures were the missing term, fixed and re-verified 2/2 before the full rerun. |
+| `mvn test -Dtest=Block9DashboardTest -DexcludedGroups=known-defect` | **5 run: 5 pass, 0 fail** | Fixed two test-side basis errors: the dashboard is gross-incl-tax while `sales.service_revenue` is net (SW-8), and the inventory tab's low-stock array is a 10-row preview (SW-12). The first run also hit one transient `SSLHandshake` on e2e184; the rerun was clean. |
 | `git diff --check` | Pending before commit | Whitespace and secret/artifact review |
 
 Serialized-run note: every command above was the only live run against the
@@ -115,9 +116,9 @@ journey tenant at the time. `-Dtest` selects the class/method but
   changes. Do not weaken them to green.
 - `e2e004` was a test-model error, not an API defect: a fully refunded bill is
   zero visits by the documented billing-history definition.
-- Blocks 4-8 are green (22 + 24 + 25 + 19 + 10 pass, 3 documented skips).
-  Remaining suite blocks are still unrun. The next step is Block 9, then 10
-  and 2-3, one class at a time with the same selector flag.
+- Blocks 4-9 are green (22 + 24 + 25 + 19 + 10 + 5 pass, 3 documented
+  skips). Remaining suite blocks are still unrun. The next step is Block 10,
+  then 2-3, one class at a time with the same selector flag.
 - The failure diagnostics no longer print the refreshed JWT: `Steps.redacted`
   strips the `token` field from every response body included in an assertion
   message.
