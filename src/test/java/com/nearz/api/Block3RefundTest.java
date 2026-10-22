@@ -187,6 +187,11 @@ public class Block3RefundTest extends BaseJourneyTest {
         int billId = billFor(customer, 1, 0, TEN_PERCENT);
         Steps.settleInFull(billId, "cash");
         BigDecimal collected = gross(1, 0, TEN_PERCENT);
+        BigDecimal discount = Money.discount(subtotal(1, 0), TEN_PERCENT, ZERO);
+        var settled = snapshot();
+        expectMoved(before, settled, "sales.total_discount", discount);
+        expectMoved(before, settled, "profit.total_discount", discount);
+
         Steps.refundInFull(billId, "QA journey refund");
 
         var after = snapshot();
@@ -194,13 +199,16 @@ public class Block3RefundTest extends BaseJourneyTest {
         assertBillIsRefunded(billId);
         expectFullyReversed(before, after, collected);
 
-        // FINDING C: a fully refunded bill reverses its revenue to zero but
-        // LEAVES its discount on the books, so Profit reports 0 revenue
-        // alongside a discount given. Asserted as observed so the number is
-        // locked while the backend team decides whether that is intended.
-        BigDecimal discount = Money.discount(subtotal(1, 0), TEN_PERCENT, ZERO);
-        expectMoved(before, after, "sales.total_discount", discount);
-        expectMoved(before, after, "profit.total_discount", discount);
+        // A paid bill adds its discount to both totals; a full refund now
+        // reverses it as well as the revenue, so the end state is unchanged
+        // even though the bill record still carries its 100. This replaces
+        // Finding C, which recorded the old "+100 discount stays on the books"
+        // behaviour on 7 Sep 2026. Measured live 22 Oct 2026.
+        assertEquals(Steps.readBill(billId).getDouble("data.discount_amount"),
+                     discount.doubleValue(), 0.001,
+            "the bill record lost its discount even though only the money was refunded");
+        expectMoved(before, after, "sales.total_discount", ZERO);
+        expectMoved(before, after, "profit.total_discount", ZERO);
     }
 
     @Test(description = "API-E2E-118 a GST bill, refunded")

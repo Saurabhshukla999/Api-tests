@@ -40,12 +40,14 @@ public final class Catalogue {
     private static final int SLOTS = 19;
 
     /** Stylists to seed. SLOTS x ROSTER is the salon's bookings-per-DAY limit,
-     *  because today's appointments outlive the run that made them. */
-    private static final int ROSTER = 20;
+     *  because today's appointments outlive the run that made them. Raised from
+     *  20 to 40 on 22 Oct 2026: a full day of reruns had booked all 380 places
+     *  of the original roster, and the API accepts more QA stylists. */
+    private static final int ROSTER = 40;
 
     /** The suite bills against these two by NAME, never by list position. */
     private static final String SERVICE_NAME = "QA Haircut";
-    /** Seeded stylists are named "QA Stylist 1".."QA Stylist 20". Only these are
+    /** Seeded stylists are named "QA Stylist 1".."QA Stylist 40". Only these are
      *  used. Anything else on the salon - a stylist someone duplicated in the
      *  dashboard, say - may not be assigned to our service, and the API refuses
      *  the booking with "X is not assigned to QA Haircut". */
