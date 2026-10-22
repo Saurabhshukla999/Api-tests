@@ -386,6 +386,9 @@ request body is rejected by the endpoint that documents it.
 - `POST /appointments` accepts no `customer_id`. The only customer handle is
   `on_behalf_of_mobile_no`, so the enquiry → customer → appointment link is a
   phone number, not an id.
+  **Corrected 22 Oct 2026:** `customer_id` IS accepted for a converted enquiry -
+  tests now send it, and `on_behalf_of_mobile_no` remains the walk-in handle.
+  The swagger spec still omits the key; see **SW-4** below.
 
 ---
 
@@ -406,3 +409,31 @@ Not everything was broken. These were checked and hold:
   a token; a self-signed token claiming `role: admin` was refused.
 - **Tenant isolation on path-scoped routes** — 240 of 244 passing. The four
   failures are D9.
+
+---
+
+## Swagger documentation drift (22 Oct 2026)
+
+Found while matching the existing Java tests against
+`api-service/swagger/v1/*.json` (13 files, 209 operations / 176 endpoints).
+These are **spec defects, not API defects**: the suite follows observed live
+behaviour and the drift is recorded here so the spec can be corrected. Full
+comparison: `docs/SWAGGER_KEY_MATRIX.md`.
+
+| id | The spec says | The API does | Evidence |
+|---|---|---|---|
+| **SW-1** | `POST /salons/{salon_id}/expense` and `PUT/PATCH/DELETE /salons/{salon_id}/expense/{id}` | `POST /expenses`, `PUT/DELETE /expenses/{id}` work; the salon-scoped write route answers 404 and the salon comes from the token | `Block7InventoryTest` line 480, `Block8ExpenseTest` line 27, `Steps.createExpense` |
+| **SW-2** | `PUT /salons/{salon_id}/settings` | `PATCH` is accepted and is what the round-off toggle uses | `Steps.setRoundOff` |
+| **SW-3** | bill line price key is `price` | `unit_price` is what the API prices from | every `createBill` helper, and the totals assertions agree with the catalogue price, not with `price` |
+| **SW-4** | `POST /appointments` has no `customer_id` | `customer_id` is accepted and links the appointment to the converted enquiry | `Steps.bookAppointment`, added 22 Oct |
+| **SW-5** | no `/services` operation in `v1/` | `GET /services` returns the master catalogue; its id is the `service_id` that `POST /salon_services` requires | `Catalogue.masterServiceId` |
+| **SW-6** | `PUT /appointments/{id}` updates the booking | `PATCH /appointments/{id}` performs the update | `Steps.attemptAppointmentChange`, `Steps.changeAppointment` |
+| **SW-7** | `PATCH /api/v1/billing/bills/{id}` replaces a draft basket | `PUT /api/v1/billing/bills/{id}` performs the replacement | `Steps.updateBillItems` |
+
+Response-schema gaps that block assertions (not request alignment):
+
+- `POST /salon_services` 201 is `schema: {type: object}` - no fields documented,
+  so the documented request keys `gender`, `duration_in_minutes`, `discount` and
+  `description` cannot be asserted on the create response.
+- `POST /api/v1/billing/bills` 201 carries no documented body schema; the suite
+  asserts the id and then the money through report deltas rather than fields.
