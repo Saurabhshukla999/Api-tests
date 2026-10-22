@@ -91,30 +91,35 @@ public final class Steps {
     /**
      * Book an appointment.
      *
-     * POST /appointments carries NO customer_id. The only customer handle it
-     * accepts is on_behalf_of_mobile_no - the salon books for a walk-in by
-     * phone. So the enquiry -> customer -> appointment link is the phone
-     * number, not an id, and that is exactly where an appointment-linking
-     * regression hides.
+     * POST /appointments now accepts customer_id for converted enquiries.
+     * The original customer handle is on_behalf_of_mobile_no - the salon books
+     * for a walk-in by phone. So the enquiry -> customer -> appointment link
+     * is the phone number, not an id, and that is exactly where an
+     * appointment-linking regression hides.
      */
     public static int bookAppointment(String salonId, String customerName,
-                                      String customerPhone, Catalogue catalogue) {
+                                      String customerPhone, int customerId,
+                                      Catalogue catalogue) {
         // The calendar read can still miss a booking - a page appearing between
         // requests, or another session working on the same salon - so a refused
         // slot is retried on the next free one rather than failing the journey.
         for (int attempt = 1; attempt <= 25; attempt++) {
             Catalogue.Booking slot = catalogue.nextFreeSlot();
             io.restassured.response.Response response = given().spec(Api.journey())
-                    .body(Map.of("appointment", Map.of(
-                            "salon_id", Integer.parseInt(salonId),
-                            "date", LocalDate.now().toString(),
-                            "start_time", slot.start(),
-                            "end_time", slot.end(),
-                            "on_behalf_of_mobile_no", customerPhone,
-                            "on_behalf_of_username", customerName,
-                            "appointment_services_attributes", List.of(Map.of(
-                                    "salon_service_id", catalogue.serviceId,
-                                    "staff_id", slot.staffId())))))
+                    .body(Map.of(
+                            "appointment", Map.of(
+                                    "salon_id", Integer.parseInt(salonId),
+                                    "date", LocalDate.now().toString(),
+                                    "start_time", slot.start(),
+                                    "end_time", slot.end(),
+                                    "on_behalf_of_mobile_no", customerPhone,
+                                    "on_behalf_of_username", customerName,
+                                    "comment", "Walk-in customer from enquiry, appointment recorded after service started",
+                                    "booking_source", "walk_in",
+                                    "customer_id", customerId,
+                                    "appointment_services_attributes", List.of(Map.of(
+                                            "salon_service_id", catalogue.serviceId,
+                                            "staff_id", slot.staffId())))))
                     .when().post("/appointments");
 
             if (response.statusCode() == 200) {
@@ -157,6 +162,8 @@ public final class Steps {
         appointment.put("end_time", end);
         appointment.put("on_behalf_of_mobile_no", phone);
         appointment.put("on_behalf_of_username", name);
+        appointment.put("comment", "Walk-in customer from enquiry, appointment recorded after service started");
+        appointment.put("booking_source", "walk_in");
         appointment.put("appointment_services_attributes", lines);
         return given().spec(Api.journey())
                 .body(Map.of("appointment", appointment))
