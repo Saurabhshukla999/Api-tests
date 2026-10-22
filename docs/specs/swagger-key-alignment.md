@@ -99,6 +99,7 @@ Material deviations:
 | `mvn test -Dtest=Block1EnquiryTest#e2e014_gstDisabled+e2e016_cancelRebookComplete ...` | **2/2 pass** | `tax.reason` for GST-off and future-only slot allocation |
 | `mvn test -Dtest=Block4AppointmentTest -DexcludedGroups=known-defect` | **24 run: 22 pass, 0 fail, 2 skip** | The two skips are the parked reschedule tests (feature not enabled on 4550). First run had two test-side failures - multi-service duration and staff-row pagination - fixed and re-verified 2/2 before the full rerun. |
 | `mvn test -Dtest=Block5BillTest -DexcludedGroups=known-defect` | **25 run: 24 pass, 0 fail, 1 skip** | Green on the first run. The skip is `e2e068_splitPayment`: partial settlement is switched off in the frontend, matching `docs/coverage_gaps.md`. |
+| `mvn test -Dtest=Block6StaffTest -DexcludedGroups=known-defect` | **25 run: 25 pass, 0 fail** | Attendance status is derived from `check_in` against the rostered shift: a 10:00 check-in on a 09:00 shift comes back `late`, so the journeys check in at 09:00. First run had three attendance failures from that assumption, fixed and re-verified 3/3 before the full rerun. |
 | `git diff --check` | Pending before commit | Whitespace and secret/artifact review |
 
 Serialized-run note: every command above was the only live run against the
@@ -112,9 +113,9 @@ journey tenant at the time. `-Dtest` selects the class/method but
   changes. Do not weaken them to green.
 - `e2e004` was a test-model error, not an API defect: a fully refunded bill is
   zero visits by the documented billing-history definition.
-- Blocks 4 and 5 are green (22 + 24 pass, 3 documented skips). Remaining suite
-  blocks are still unrun. The next step is Block 6, then 7-10 and 2-3, one
-  class at a time with the same selector flag.
+- Blocks 4, 5 and 6 are green (22 + 24 + 25 pass, 3 documented skips).
+  Remaining suite blocks are still unrun. The next step is Block 7, then 8-10
+  and 2-3, one class at a time with the same selector flag.
 - The failure diagnostics no longer print the refreshed JWT: `Steps.redacted`
   strips the `token` field from every response body included in an assertion
   message.
