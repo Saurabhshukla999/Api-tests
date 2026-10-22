@@ -1,7 +1,6 @@
 package com.nearz.api;
 
 import io.restassured.path.json.JsonPath;
-import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 import java.math.BigDecimal;
@@ -13,30 +12,14 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
 /**
- * API-E2E-076 .. 100 - payments and settlement.
+ * API-E2E-079 .. 100 - payments and settlement.
  *
- * Ten of these need two payments against one bill: an advance, then the
- * balance. That is the partial-payment feature, switched off in the Nearz
- * frontend, so they are written and skip-marked rather than dropped. Turning
- * one on is deleting its SkipException.
+ * Partial payments (two or more payments against one bill) are out of future
+ * scope. Their parked cases - 076-078, 086-088, 090 and 092-096 - were removed
+ * on 22 Oct 2026 rather than left as permanent skips. The settlement journeys
+ * that use one full payment remain.
  */
 public class Block2PaymentTest extends BaseJourneyTest {
-
-    private static final String PARTIAL =
-        "partial payments are switched off in the frontend. The journey is "
-      + "written; delete this line when the feature comes back.";
-
-    // =======================================================================
-    // 076-078: advance then balance
-    // =======================================================================
-    @Test(description = "API-E2E-076 1,000 bill, 500 paid, 500 outstanding")
-    public void e2e076_halfPaid() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-077 1,000 bill paid as 250 then 750")
-    public void e2e077_twoInstalments() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-078 1,000 bill paid as 300, 300, 400")
-    public void e2e078_threeInstalments() { throw new SkipException(PARTIAL); }
 
     // =======================================================================
     // 079-085: the lead's list asks seven questions of one settlement
@@ -95,17 +78,8 @@ public class Block2PaymentTest extends BaseJourneyTest {
     }
 
     // =======================================================================
-    // 086-096
+    // 086-096: settlement and refund cases that do not need part-payment
     // =======================================================================
-    @Test(description = "API-E2E-086 advance then balance: Bills Settled +1")
-    public void e2e086_billsSettled() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-087 advance then balance: nothing outstanding")
-    public void e2e087_nothingOutstanding() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-088 advance then balance: status becomes Paid")
-    public void e2e088_statusPaid() { throw new SkipException(PARTIAL); }
-
     @Test(description = "API-E2E-089 settle, then refund what was collected")
     public void e2e089_refundWhatWasCollected() {
         LocalDate day = Steps.today();
@@ -121,9 +95,6 @@ public class Block2PaymentTest extends BaseJourneyTest {
         expectFullyReversed(before, after, gross(1, 0, ZERO));
     }
 
-    @Test(description = "API-E2E-090 refund part, then collect again")
-    public void e2e090_refundPartThenCollect() { throw new SkipException(PARTIAL); }
-
     @Test(description = "API-E2E-091 the refund is visible in every report it touched")
     public void e2e091_refundVisibleEverywhere() {
         LocalDate day = Steps.today();
@@ -137,21 +108,6 @@ public class Block2PaymentTest extends BaseJourneyTest {
         assertSameDay(day);
         expectFullyReversed(before, after, gross(1, 0, ZERO));
     }
-
-    @Test(description = "API-E2E-092 advance, balance, then refund the whole transaction")
-    public void e2e092_refundAfterInstalments() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-093 advance in cash, balance by card")
-    public void e2e093_cashThenCard() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-094 advance by card, balance in cash")
-    public void e2e094_cardThenCash() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-095 three payments, one refunded")
-    public void e2e095_threePaymentsOneRefund() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-096 three payments, all refunded")
-    public void e2e096_threePaymentsAllRefunded() { throw new SkipException(PARTIAL); }
 
     // =======================================================================
     // 097-100

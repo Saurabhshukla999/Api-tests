@@ -216,10 +216,16 @@ public abstract class BaseJourneyTest {
      * A full refund nets every money figure back to zero AND records itself.
      * A sale that was silently deleted also nets to zero - that is a different,
      * worse bug, and this is what tells the two apart.
+     *
+     * The bill itself stays in sales.bills_count. A refund reverses the money,
+     * not the fact that a bill was raised. That is the product decision of
+     * 22 Oct 2026; the swagger text saying a fully refunded bill is excluded
+     * is recorded as drift in docs/DEFECTS.md (SW-13).
      */
     protected void expectFullyReversed(Map<String, BigDecimal> before,
                                        Map<String, BigDecimal> after,
                                        BigDecimal collected) {
+        expectMoved(before, after, "sales.bills_count", ONE);
         expectMoved(before, after, "sales.total_revenue", ZERO);
         expectMoved(before, after, "sales.service_revenue", ZERO);
         expectMoved(before, after, "payments.total_collected", ZERO);

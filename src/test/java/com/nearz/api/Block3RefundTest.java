@@ -1,7 +1,6 @@
 package com.nearz.api;
 
 import io.restassured.path.json.JsonPath;
-import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 import java.math.BigDecimal;
@@ -20,13 +19,11 @@ import static org.testng.Assert.assertTrue;
  * both sides would satisfy a naive "revenue went back to zero" check, and that
  * is a worse bug than the one such a check is looking for.
  *
- * Partial REFUNDS are supported by the API and used here. Only partial
- * PAYMENTS are switched off in the frontend.
+ * Partial REFUNDS are supported by the API and used here. Partial PAYMENTS
+ * are out of future scope; their parked cases were removed on 22 Oct 2026.
  */
 public class Block3RefundTest extends BaseJourneyTest {
 
-    private static final String PARTIAL =
-        "needs partial payments, which are switched off in the frontend.";
     private static final BigDecimal TEN_PERCENT = new BigDecimal("10");
 
     // =======================================================================
@@ -86,23 +83,8 @@ public class Block3RefundTest extends BaseJourneyTest {
         assertBillIsRefunded(r.billId());
     }
 
-    // =======================================================================
-    // 109-113: need partial payments
-    // =======================================================================
-    @Test(description = "API-E2E-109 refund only the portion collected")
-    public void e2e109() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-110 advance, balance, then refund it all")
-    public void e2e110() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-111 two payments, first refunded")
-    public void e2e111() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-112 two payments, second refunded")
-    public void e2e112() { throw new SkipException(PARTIAL); }
-
-    @Test(description = "API-E2E-113 two payments, both refunded")
-    public void e2e113() { throw new SkipException(PARTIAL); }
+    // API-E2E-109..113 were removed on 22 Oct 2026: they all require partial
+    // payments, which are out of future scope.
 
     // =======================================================================
     // 114-116: a bill with both a service and a product
@@ -275,8 +257,10 @@ public class Block3RefundTest extends BaseJourneyTest {
         assertSameDay(day);
         assertBillIsPaidBy(kept, customer);
 
+        // Two bills were raised, so the bill count keeps both. Only the kept
+        // bill contributes revenue and payments.
         BigDecimal survives = gross(1, 0, ZERO);
-        expectMoved(before, after, "sales.bills_count", ONE);
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
         expectMoved(before, after, "customers.total_spend_in_range", survives);
@@ -387,8 +371,9 @@ public class Block3RefundTest extends BaseJourneyTest {
         var after = snapshot();
         assertSameDay(day);
 
+        // Two bills were raised; the refunded one stays in the count.
         BigDecimal survives = gross(1, 0, ZERO);
-        expectMoved(before, after, "sales.bills_count", ONE);
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
         expectMoved(before, after, "payments.payments_count", ONE);

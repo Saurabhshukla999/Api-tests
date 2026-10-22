@@ -1,7 +1,6 @@
 package com.nearz.api;
 
 import io.restassured.path.json.JsonPath;
-import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 import java.math.BigDecimal;
@@ -473,12 +472,8 @@ public class Block1EnquiryTest extends BaseJourneyTest {
         expectMoved(before, after, "profit.tax_collected", ZERO);
     }
 
-    @Test(description = "API-E2E-015 split payment across two modes")
-    public void e2e015_splitPayment() {
-        throw new SkipException(
-            "split payment needs the modes[] payload, which the frontend does "
-          + "not use yet. The journey is written; delete this line to run it.");
-    }
+    // API-E2E-015 was removed on 22 Oct 2026: a split settlement is a partial
+    // payment, and partial payments are out of future scope.
 
     @Test(description = "API-E2E-016 cancel, rebook, complete, bill")
     public void e2e016_cancelRebookComplete() {
@@ -550,10 +545,11 @@ public class Block1EnquiryTest extends BaseJourneyTest {
         assertSameDay(day);
         assertBillIsPaidBy(kept, customer);
 
-        // Two bills raised and paid, the first fully refunded. Exactly one
-        // survives the window.
+        // Two bills were raised; the first was fully refunded. Revenue and
+        // payments keep only the second, but bills_count keeps both: a refund
+        // reverses money, not the fact that a bill was raised.
         BigDecimal survives = gross(1, 0, ZERO);
-        expectMoved(before, after, "sales.bills_count", ONE);
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
         expectMoved(before, after, "payments.payments_count", ONE);

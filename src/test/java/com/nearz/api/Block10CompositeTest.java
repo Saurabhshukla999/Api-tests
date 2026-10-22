@@ -282,11 +282,12 @@ public class Block10CompositeTest extends BaseJourneyTest {
         var after = snapshot();
         assertSameDay(day);
 
-        // two sales survive
+        // Two sales survive. All three bills stay in the count: refunding one
+        // reverses its money, not the fact that it was raised.
         BigDecimal one = gross(1, 0, ZERO);
         BigDecimal two = Money.round(one.multiply(new BigDecimal("2")));
         expectMoved(before, after, "sales.total_revenue", two);
-        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("3"));
         expectMoved(before, after, "payments.total_collected", two);
         // tax-inclusive, same as the rows
         expectMoved(before, after, "staff_performance.total_service_revenue",
@@ -315,9 +316,9 @@ public class Block10CompositeTest extends BaseJourneyTest {
         var after = snapshot();
         assertSameDay(day);
 
-        // one basket's worth survives, arithmetic and all
+        // One basket's worth survives; both bills stay in the count.
         expectMoved(before, after, "sales.total_revenue", gross(1, 1, TEN));
-        expectMoved(before, after, "sales.bills_count", ONE);
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
         expectMoved(before, after, "payments.total_collected", gross(1, 1, TEN));
         expectMoved(before, after, "profit.tax_collected", tax(1, 1, TEN));
     }
@@ -350,7 +351,8 @@ public class Block10CompositeTest extends BaseJourneyTest {
 
         BigDecimal two = Money.round(gross(1, 0, ZERO).multiply(new BigDecimal("2")));
         expectMoved(before, after, "sales.total_revenue", two);
-        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
+        // Two paid bills plus the refunded one; the cancelled visit raised none.
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("3"));
 
         assertMovedBy("the dashboard revenue KPI", Money.at(dashBefore, "data.kpis.revenue.value"),
                 Money.at(dashAfter, "data.kpis.revenue.value"), two);
@@ -646,7 +648,8 @@ public class Block10CompositeTest extends BaseJourneyTest {
             BigDecimal taxOn = Money.tax(basket, catalogue.gstRate);
 
             expectMoved(before, after, "sales.total_revenue", charged);
-            expectMoved(before, after, "sales.bills_count", ONE);
+            // Two bills were raised; the refunded one stays counted.
+            expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
             expectMoved(before, after, "payments.total_collected", charged);
             expectMoved(before, after, "customers.new_customers", ONE);
 
