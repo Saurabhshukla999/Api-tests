@@ -658,14 +658,8 @@ public class Block5BillTest extends BaseJourneyTest {
         expectSettled(before, after, 1, 0, ZERO);
     }
 
-    @Test(description = "API-E2E-068 a bill split across cash and card")
-    public void e2e068_splitPayment() {
-        throw new SkipException(
-            "A split settlement is a PARTIAL payment, and partial payment is "
-          + "switched off in the frontend, so the flow is not reachable. This is "
-          + "the same reason the other partial-payment cases are parked - see "
-          + "docs/coverage_gaps.md. Turn the feature on and delete this skip.");
-    }
+    // API-E2E-068 was removed on 22 Oct 2026: a split settlement is a partial
+    // payment, and partial payments are out of future scope.
 
     /**
      * API-E2E-069 the bill is settled, then a second full payment is sent.
