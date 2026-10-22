@@ -1021,8 +1021,24 @@ public final class Steps {
     }
 
     /** Is this product on the dashboard's low-stock list, and how badly? */
-    public static String lowStockSeverity(JsonPath inventory, int productId) {
-        List<Map<String, Object>> rows = inventory.getList("data.low_stock");
+    /**
+     * Severity of a product on the FULL low-stock list.
+     *
+     * The inventory tab's `data.low_stock` array is a 10-row preview sorted by
+     * stock; a product at 9 against a reorder level of 9 falls outside it while
+     * `data.summary.low_stock` counts it (21 live on 22 Oct 2026, list 10).
+     * The Action Center endpoint is the complete list and the one that agrees
+     * with the count (SW-12).
+     */
+    public static String lowStockSeverity(String salonId, int productId) {
+        JsonPath list = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("per_page", 200)
+                .queryParam("_qa", System.nanoTime())
+                .when().get("/salons/{salonId}/dashboard/action_center/low_stock")
+                .then().statusCode(200)
+                .extract().jsonPath();
+        List<Map<String, Object>> rows = list.getList("data.items");
         if (rows == null) {
             return null;
         }
