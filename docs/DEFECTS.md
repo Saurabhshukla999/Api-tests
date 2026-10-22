@@ -435,6 +435,7 @@ comparison: `docs/SWAGGER_KEY_MATRIX.md`.
 | **SW-8** | `sales.service_revenue` is GST-included and `service_revenue + product_revenue = total_revenue` | `service_revenue` is **before GST**; the live tile is labelled "Service Revenue (before GST)" and `service + product + gst = total` (measured: 13,900 + 200 + 2,538 = 16,638) | `BaseJourneyTest.expectSettled` now asserts the net figure; `Block1EnquiryTest#e2e001` |
 | **SW-9** | bill `tax` accepts `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is present; the key is undocumented | `Steps.createBill`, `Block1EnquiryTest#e2e014` |
 | **SW-10** | appointment SHOW `service_name` "falls back to the catalogue name when the salon has not set a custom name" | SHOW always returns the **catalogue** name in `service_name` and the salon's label in `custom_name` (`Blow Dry` / `QA Blow Dry`); the calendar list promotes the custom name into `service_name` | `Block1EnquiryTest#e2e008` now asserts `custom_name` |
+| **SW-11** | the profit summary is "Revenue minus cost of goods and operating expenses", and `total_cost` is described only as "Total Cost" | `total_cost` also includes **`staff_commission`**: live today `0 opex + 3,900 COGS + 1,300 commission = 5,200`, and `net_profit = gross - total_cost`. The stated formula is short by the commission | `Reports.PROFIT` now reads `staff_commission`; `Block8ExpenseTest.assertIdentityHolds` asserts all three terms |
 
 Response-schema gaps that block assertions (not request alignment):
 

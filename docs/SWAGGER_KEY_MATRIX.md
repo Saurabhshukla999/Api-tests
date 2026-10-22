@@ -70,6 +70,7 @@ the drift is recorded in `docs/DEFECTS.md` as SW-1..SW-10.
 | SW-8 | `sales.service_revenue` is GST-included and sums with `product_revenue` to `total_revenue` | the tile is labelled **"before GST"**; `service + product + gst = total` (13,900 + 200 + 2,538 = 16,638). `services.total_revenue` and `staff_performance.total_service_revenue` **are** gross - only the Sales split is net |
 | SW-9 | bill `tax` documents `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is sent |
 | SW-10 | appointment SHOW `service_name` uses the custom name when one is set | SHOW returns the **catalogue** name in `service_name` and the salon label in `custom_name`; the calendar list puts the custom name in `service_name` |
+| SW-11 | profit summary: "Revenue minus cost of goods and operating expenses"; `total_cost` = "Total Cost" | `total_cost` = opex + COGS + **staff_commission** (0 + 3,900 + 1,300 = 5,200 today); `net_profit = gross - total_cost`. The stated formula omits commission |
 
 Response-schema gaps that limit assertion, not request alignment:
 
