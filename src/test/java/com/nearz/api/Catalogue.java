@@ -27,6 +27,10 @@ import static io.restassured.RestAssured.given;
  *     phone      must be a 10-digit Indian mobile
  *     the salon must be open on the day you book
  *     the stylist's shift must cover the slot you book
+ *     POST /salon_services must link a master service from GET /services
+ *     via service_id (required since ~Sep 2026 - without it the create
+ *     answers 400 "service_id is required"); the suite's custom_name is
+ *     kept, and the billing list shows it as the display name.
  */
 public final class Catalogue {
 
@@ -151,9 +155,43 @@ public final class Catalogue {
      * catalogue picked it, and four money assertions failed by twenty paise
      * against a price nobody expected. Naming the record makes the suite immune
      * to whatever else is lying around on the salon.
+     *
+     * The billing list shows each salon service under its custom_name, so a
+     * service this method created on an earlier run is found here and the
+     * create below is skipped - runs after the first make no writes.
      */
     private static Item service(String salonId) {
         return findOrCreateService(salonId, SERVICE_NAME, SERVICE_PRICE);
+    }
+
+    /** Which master-service entry (GET /services) each suite service links.
+     *  Resolved by name at runtime - master ids are backend data, not constants. */
+    private static final Map<String, String> MASTER_NAMES = Map.of(
+            SERVICE_NAME, "Hair Cut",
+            SECOND_SERVICE_NAME, "Blow Dry");
+
+    /** The master-service id a salon-service create must link via service_id. */
+    private static int masterServiceId(String customName) {
+        String masterName = MASTER_NAMES.get(customName);
+        if (masterName == null) {
+            throw new IllegalStateException(
+                "no master service mapped for '" + customName + "' - add it to "
+              + "MASTER_NAMES in Catalogue.java rather than guessing an id");
+        }
+        JsonPath body = given().spec(Api.journey())
+                .get("/services")
+                .then().statusCode(200).extract().jsonPath();
+        List<Map<String, Object>> masters = body.getList("data.services");
+        if (masters != null) {
+            for (Map<String, Object> m : masters) {
+                if (masterName.equals(m.get("name"))) {
+                    return Integer.parseInt(m.get("id").toString());
+                }
+            }
+        }
+        throw new IllegalStateException(
+            "master service '" + masterName + "' not found in GET /services - "
+          + "the backend catalogue changed, check it before creating anything");
     }
 
     /** Find a service by NAME, or create it. Never by list position - the
@@ -175,6 +213,7 @@ public final class Catalogue {
         int id = given().spec(Api.journey())
                 .body(Map.of("salon_service", Map.of(
                         "salon_id", Integer.parseInt(salonId),
+                        "service_id", masterServiceId(name),
                         "custom_name", name,
                         "category", "Hair",
                         "price", price,
@@ -207,7 +246,7 @@ public final class Catalogue {
                 .body(Map.ofEntries(
                         Map.entry("name", PRODUCT_NAME),
                         Map.entry("brand", "QA Brand"),
-                        Map.entry("category", "Haircare"),
+                        Map.entry("category", "Hair Care"),
                         Map.entry("unit", "pcs"),
                         Map.entry("cost_price", 100),
                         Map.entry("selling_price", PRODUCT_PRICE),

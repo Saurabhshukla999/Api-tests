@@ -62,13 +62,13 @@ public abstract class BaseJourneyTest {
     /** Book today, mark it completed, return the appointment id. */
     protected int completeAppointmentFor(NewCustomer customer) {
         int appointmentId = Steps.bookAppointment(
-                SALON, customer.name(), customer.phone(), catalogue);
+                SALON, customer.name(), customer.phone(), customer.id(), catalogue);
         Steps.setAppointmentStatus(appointmentId, "completed");
         return appointmentId;
     }
 
     protected int bookAppointmentFor(NewCustomer customer) {
-        return Steps.bookAppointment(SALON, customer.name(), customer.phone(), catalogue);
+        return Steps.bookAppointment(SALON, customer.name(), customer.phone(), customer.id(), catalogue);
     }
 
     protected int billFor(NewCustomer customer, int services, int products,
