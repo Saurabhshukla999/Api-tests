@@ -35,7 +35,11 @@ import static org.testng.Assert.assertTrue;
  */
 public class Block6StaffTest extends BaseJourneyTest {
 
-    private static final String IN  = "10:00";
+    // The hired stylist is rostered 09:00-21:00 (Steps.createStaff). The API
+    // derives `late` from check_in against that rostered start - a 10:00
+    // check-in came back "late" with late_by_min 60, not the "present" that
+    // was sent. Check in at the shift start so "present" means present.
+    private static final String IN  = "09:00";
     private static final String OUT = "19:00";
 
     /** A stylist hired for this test alone, so its figures start at zero and
