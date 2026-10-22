@@ -121,13 +121,17 @@ public final class Steps {
 
     /** Returns the salon_customer_profile id the enquiry became. */
     public static int convertEnquiry(String salonId, int enquiryId) {
-        return given().spec(Api.journey())
+        io.restassured.response.Response response = given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .pathParam("id", enquiryId)
                 .body(Map.of())
-                .when().post("/salons/{salonId}/enquiries/{id}/convert")
-                .then().statusCode(200)
-                .extract().jsonPath().getInt("data.customer_profile.id");
+                .when().post("/salons/{salonId}/enquiries/{id}/convert");
+        if (response.statusCode() != 200) {
+            throw new AssertionError(
+                "converting enquiry " + enquiryId + " answered "
+              + response.statusCode() + ": " + redacted(response));
+        }
+        return response.jsonPath().getInt("data.customer_profile.id");
     }
 
     /**
