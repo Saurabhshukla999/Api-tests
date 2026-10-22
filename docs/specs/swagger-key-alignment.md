@@ -78,6 +78,14 @@ Material deviations:
   could collide) and avoids a `91` prefix, which the live normaliser truncates
   (D22). `Catalogue.secondServiceStaffId()` re-assigns the dual stylist to both
   QA services when an older record is reused.
+- `Catalogue.roster()` repairs a staff record whose non-empty `service_ids`
+  point at a deleted service (salon 4550 still had stylists on 54645 after QA
+  Haircut became 54943). The API refuses those bookings with "not assigned to";
+  empty service_ids are treated as unrestricted and left alone.
+- `staffRevenue()` filters the Staff Performance rows by the documented
+  `staff_id` instead of paging 444 staff 100 at a time.
+- Multi-service appointments allocate a contiguous block (`nextFreeBlock`) -
+  two 30-minute services need a 60-minute end time.
 
 ## Validation evidence
 
@@ -89,6 +97,7 @@ Material deviations:
 | `mvn test -Dtest=Block1EnquiryTest#e2e004_fullRefundReverses ...` | **1/1 pass** | Corrected refund/customer model - a fully refunded bill is zero visits |
 | `mvn test -Dtest=Block1EnquiryTest#e2e008_serviceChanged+e2e009_customerDetailsChanged ...` | **2/2 pass** | Dual-stylist assignment repair, SHOW `custom_name`, non-`91` phone |
 | `mvn test -Dtest=Block1EnquiryTest#e2e014_gstDisabled+e2e016_cancelRebookComplete ...` | **2/2 pass** | `tax.reason` for GST-off and future-only slot allocation |
+| `mvn test -Dtest=Block4AppointmentTest -DexcludedGroups=known-defect` | **24 run: 22 pass, 0 fail, 2 skip** | The two skips are the parked reschedule tests (feature not enabled on 4550). First run had two test-side failures - multi-service duration and staff-row pagination - fixed and re-verified 2/2 before the full rerun. |
 | `git diff --check` | Pending before commit | Whitespace and secret/artifact review |
 
 Serialized-run note: every command above was the only live run against the
@@ -102,5 +111,9 @@ journey tenant at the time. `-Dtest` selects the class/method but
   changes. Do not weaken them to green.
 - `e2e004` was a test-model error, not an API defect: a fully refunded bill is
   zero visits by the documented billing-history definition.
-- Remaining suite blocks are still unrun. The next step is Block 4, then 5-10
-  and 2-3, one class at a time with the same selector flag.
+- Block 4 is green (22 pass, 2 documented skips). Remaining suite blocks are
+  still unrun. The next step is Block 5, then 6-10 and 2-3, one class at a time
+  with the same selector flag.
+- The failure diagnostics no longer print the refreshed JWT: `Steps.redacted`
+  strips the `token` field from every response body included in an assertion
+  message.
