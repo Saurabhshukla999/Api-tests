@@ -45,8 +45,12 @@ import static org.testng.Assert.assertTrue;
  *
  * The model, confirmed end to end:
  *
- *     total_cost = operating_expenses + service_cogs
+ *     total_cost = operating_expenses + service_cogs + staff_commission
  *     net_profit = gross_revenue - total_cost
+ *
+ * The commission term is easy to miss: the figure is real, the label says
+ * "Total Cost", and a test that adds only the first two terms passes until a
+ * commission-bearing block (Block 6) has run earlier in the same day.
  *
  * Every test here cleans up after itself in a finally block. An expense is
  * salon-wide and dated, so one left behind would silently shift the profit
@@ -441,13 +445,16 @@ public class Block8ExpenseTest extends BaseJourneyTest {
     private void assertIdentityHolds(Map<String, BigDecimal> now) {
         BigDecimal opex = now.get("profit.operating_expenses");
         BigDecimal cogs = now.get("profit.service_cogs");
+        BigDecimal commission = now.get("profit.staff_commission");
         BigDecimal cost = now.get("profit.total_cost");
         BigDecimal gross = now.get("profit.gross_revenue");
         BigDecimal net = now.get("profit.net_profit");
 
-        assertTrue(Money.closeEnough(cost, Money.round(opex.add(cogs))),
+        BigDecimal expected = Money.round(opex.add(cogs).add(commission));
+        assertTrue(Money.closeEnough(cost, expected),
             "Total Cost is " + cost + " but Operating Expenses (" + opex
-          + ") plus COGS (" + cogs + ") is " + Money.round(opex.add(cogs)));
+          + ") plus COGS (" + cogs + ") plus Staff Commission (" + commission
+          + ") is " + expected);
 
         assertTrue(Money.closeEnough(net, Money.round(gross.subtract(cost))),
             "Net Profit is " + net + " but Gross Revenue (" + gross
