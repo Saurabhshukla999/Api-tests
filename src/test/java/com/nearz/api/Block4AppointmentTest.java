@@ -155,8 +155,10 @@ public class Block4AppointmentTest extends BaseJourneyTest {
                         "id", lineId, "salon_service_id", newService,
                         "staff_id", dualStaff))));
 
+        // SHOW keeps the catalogue name in service_name and the salon's label in
+        // custom_name (SW-10); the calendar list is the endpoint that swaps them.
         assertEquals(Steps.readAppointment(appointmentId)
-                          .getString("data.salon_services[0].service_name"),
+                          .getString("data.salon_services[0].custom_name"),
                      "QA Blow Dry", "the service did not change");
 
         Steps.setAppointmentStatus(appointmentId, "completed");

@@ -4,6 +4,7 @@ import io.restassured.path.json.JsonPath;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -377,7 +378,22 @@ public final class Catalogue {
             if (all != null) {
                 for (Map<String, Object> member : all) {
                     if (DUAL_STAFF_NAME.equals(String.valueOf(member.get("name")))) {
-                        secondStaff = Integer.parseInt(member.get("id").toString());
+                        int found = Integer.parseInt(member.get("id").toString());
+                        // Reusing the stylist by name is not enough: the record
+                        // may pre-date QA Blow Dry, or point at an older id for
+                        // it, and then the appointment change is refused with
+                        // "QA Dual Stylist is not assigned to QA Blow Dry".
+                        // Assign both services explicitly before handing it back.
+                        List<Integer> wanted = List.of(serviceId, secondServiceId());
+                        if (!serviceIdsOf(member).containsAll(wanted)) {
+                            given().spec(Api.journey())
+                                    .pathParam("salonId", salonId)
+                                    .pathParam("id", found)
+                                    .body(Map.of("salon_service_ids", wanted))
+                                    .when().put("/salons/{salonId}/staff/{id}")
+                                    .then().statusCode(200);
+                        }
+                        secondStaff = found;
                         return secondStaff;
                     }
                 }
@@ -399,12 +415,26 @@ public final class Catalogue {
         return secondStaff;
     }
 
+    private static List<Integer> serviceIdsOf(Map<String, Object> member) {
+        List<Integer> ids = new ArrayList<>();
+        Object raw = member.get("service_ids");
+        if (raw instanceof List<?> list) {
+            for (Object value : list) {
+                ids.add(Integer.parseInt(String.valueOf(value)));
+            }
+        }
+        return ids;
+    }
+
     public Booking nextFreeSlot() {
         if (takenSlots.isEmpty()) {
             readTodaysCalendar();
         }
         for (int slot = 0; slot < SLOTS; slot++) {
             String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
             for (int staffId : staffIds) {
                 if (unusableStaff.contains(staffId)) {
                     continue;
@@ -438,6 +468,9 @@ public final class Catalogue {
         }
         for (int slot = 0; slot < SLOTS; slot++) {
             String start = startOf(slot);
+            if (!bookable(start)) {
+                continue;
+            }
             if (takenSlots.add(staffId + "@" + start)) {
                 return new Booking(start, endOf(slot), staffId);
             }
@@ -500,6 +533,19 @@ public final class Catalogue {
 
     private static String startOf(int slot) {
         return String.format("%02d:%02d", FIRST_HOUR + slot / 2, 30 * (slot % 2));
+    }
+
+    /**
+     * A slot that has already started is not bookable.
+     *
+     * The API auto-completes an appointment whose time has passed, so a test
+     * that books 10:00 at 10:22 receives a COMPLETED appointment and every
+     * later status change is refused with "Status cannot be changed once the
+     * appointment is completed". The one-minute margin covers the round trip
+     * between choosing a slot and the server stamping it.
+     */
+    private static boolean bookable(String start) {
+        return LocalTime.parse(start).isAfter(LocalTime.now().plusMinutes(1));
     }
 
     private static String endOf(int slot) {

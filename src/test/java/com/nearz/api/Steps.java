@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
@@ -28,8 +27,6 @@ import static org.testng.Assert.assertEquals;
  */
 public final class Steps {
 
-    private static final AtomicInteger COUNTER = new AtomicInteger();
-
     private Steps() { }
 
     /**
@@ -39,10 +36,29 @@ public final class Steps {
      * customer instead of creating one - which silently breaks every
      * new-customer assertion downstream. Both learned the hard way.
      */
+    /**
+     * A fresh customer mobile for every call.
+     *
+     * This used to derive digits from the current millisecond inside a
+     * 100-second window plus the call counter. Two runs that reached the same
+     * test at the same point in that window produced the SAME phone, so the
+     * enquiry converted onto yesterday's customer and every first-time-visitor
+     * assertion downstream silently measured the wrong thing. Random keeps the
+     * value 10 digits and starting with 9 while making a cross-run collision
+     * effectively impossible.
+     */
     public static String newPhone() {
-        int n = COUNTER.incrementAndGet();
-        long tail = (System.currentTimeMillis() % 1_000_00L) * 10 + (n % 10);
-        return "9" + String.format("%09d", tail % 1_000_000_000L);
+        long tail = java.util.concurrent.ThreadLocalRandom.current()
+                .nextLong(1_000_000_000L);
+        String digits = String.format("%09d", tail);
+        // The live normaliser treats a leading "91" as the India trunk prefix
+        // even on a 10-digit number and stores only the last 8 digits
+        // (9100955749 -> 00955749). That is an API defect, recorded separately;
+        // the suite's job is not to trip over it on every tenth customer.
+        if (digits.charAt(0) == '1') {
+            digits = "2" + digits.substring(1);
+        }
+        return "9" + digits;
     }
 
     // -----------------------------------------------------------------------
@@ -294,11 +310,23 @@ public final class Steps {
 
     /** status is one of: pending confirmed arrived started completed no_show cancelled */
     public static void setAppointmentStatus(int appointmentId, String status) {
-        given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .pathParam("id", appointmentId)
                 .body(Map.of("status", status))
                 .when().patch("/appointments/{id}/status")
-                .then().statusCode(200);
+                .then().extract().response();
+        if (response.statusCode() != 200) {
+            throw new AssertionError(
+                "PATCH /appointments/" + appointmentId + "/status -> " + status
+              + " was refused with " + response.statusCode()
+              + "\n  response: " + redacted(response));
+        }
+    }
+
+    /** Response text with the refreshed JWT removed - logs are not a secret store. */
+    private static String redacted(Response response) {
+        return response.asString().replaceAll(
+            "\"token\"\\s*:\\s*\"[^\"]*\"", "\"token\":\"<redacted>\"");
     }
 
     /** Raise a draft bill. Returns the bill id. */
@@ -364,14 +392,31 @@ public final class Steps {
             body.put("discount", Map.of("pct", discountPct, "flat", 0));
         }
         if (gstEnabled != null) {
-            body.put("tax", Map.of("gst_enabled", gstEnabled));
+            Map<String, Object> tax = new LinkedHashMap<>();
+            tax.put("gst_enabled", gstEnabled);
+            if (!gstEnabled) {
+                // Live API (22 Oct 2026) refuses a GST-off bill with
+                // "Give a reason for switching GST off on this bill" unless the
+                // tax block carries a reason. The swagger tax schema lists only
+                // gst_enabled and mode, so this is documented as drift in
+                // docs/DEFECTS.md (SW-9) while the test follows the API.
+                tax.put("reason", "QA journey: GST disabled for this bill");
+            }
+            body.put("tax", tax);
         }
 
-        return given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .body(body)
                 .when().post("/api/v1/billing/bills")
-                .then().statusCode(201)
-                .extract().jsonPath().getInt("data.id");
+                .then().extract().response();
+        if (response.statusCode() != 201) {
+            throw new AssertionError(
+                "POST /api/v1/billing/bills was refused with "
+              + response.statusCode()
+              + "\n  sent: " + body
+              + "\n  response: " + redacted(response));
+        }
+        return response.jsonPath().getInt("data.id");
     }
 
     // -----------------------------------------------------------------------
