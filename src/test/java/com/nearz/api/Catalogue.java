@@ -135,7 +135,10 @@ public final class Catalogue {
         List<Map<String, Object>> days = new ArrayList<>();
         for (int weekday = 0; weekday < 7; weekday++) {
             days.add(Map.of("weekday", weekday, "closed", false,
-                            "start_time", "09:00", "end_time", "21:00"));
+                            "start_time", "09:00", "end_time", "21:00",
+                            // Documented; false keeps the full 09:00-21:00
+                            // window bookable, which the journeys rely on.
+                            "has_break", false));
         }
         given().spec(Api.journey())
                 .pathParam("salonId", salonId)
@@ -219,7 +222,12 @@ public final class Catalogue {
                         "price", price,
                         "duration_in_minutes", 30,
                         "gender", "unisex",
-                        "active", true)))
+                        "active", true,
+                        // Documented, still unfilled: discount (a percentage)
+                        // and description. staff_ids is behavioural - stylists
+                        // are attached by the roster, not here.
+                        "discount", 0,
+                        "description", "QA catalogue service")))
                 .when().post("/salon_services")
                 .then().statusCode(201)
                 .extract().jsonPath().getInt("data.id");
