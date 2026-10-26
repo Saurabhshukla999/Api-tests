@@ -79,8 +79,8 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
 
     @BeforeClass(alwaysRun = true)
     public void hireCommissionPair() {
-        oneName = "QA COMM one " + System.nanoTime() % 100000;
-        twoName = "QA COMM two " + System.nanoTime() % 100000;
+        oneName = "QA COMM one " + System.nanoTime();
+        twoName = "QA COMM two " + System.nanoTime();
         one = Steps.createStaffWithCommission(SALON, oneName, FIFTEEN, FIVE);
         two = Steps.createStaffWithCommission(SALON, twoName, FIFTEEN, FIFTEEN);
     }
@@ -186,6 +186,17 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
             entries.add((Map<String, Object>) raw);
         }
         return entries;
+    }
+
+    /** The index of the line of the given type; the API does not promise item order. */
+    private int lineIndexOfType(int billId, String type) {
+        List<Map<String, Object>> items = Steps.readBill(billId).getList("data.items");
+        for (int i = 0; i < items.size(); i++) {
+            if (type.equals(String.valueOf(items.get(i).get("type")))) {
+                return i;
+            }
+        }
+        throw new AssertionError("bill " + billId + " has no " + type + " line");
     }
 
     private BigDecimal shareOf(int billId, int lineIndex, int staffId) {
@@ -398,18 +409,16 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
                 List.of(noStaff, share(two, "50")), "Choose staff from this salon");
 
         // A person from another salon must not be paid out of this one.
-        int[] foreign = { 0 };
-        Response others = io.restassured.RestAssured.given().spec(Api.owner())
-                .pathParam("salonId", Env.OWNER_SALON)
+        Response others = io.restassured.RestAssured.given().spec(Api.other())
+                .pathParam("salonId", Env.OTHER_SALON)
                 .queryParam("limit", 5)
                 .when().get("/salons/{salonId}/staff")
                 .then().statusCode(200).extract().response();
         List<Integer> foreignIds = others.jsonPath().getList("data.items.id", Integer.class);
-        if (foreignIds != null && !foreignIds.isEmpty()) {
-            foreign[0] = foreignIds.get(0);
-            refused("a stylist from another salon", customer,
-                    List.of(share(foreign[0], "100")), "Choose staff from this salon");
-        }
+        assertTrue(foreignIds != null && !foreignIds.isEmpty(),
+            "salon " + Env.OTHER_SALON + " has no staff to test a cross-tenant refusal");
+        refused("a stylist from another salon", customer,
+                List.of(share(foreignIds.get(0), "100")), "Choose staff from this salon");
 
         // Product lines are sold by one person; the API says so explicitly.
         Map<String, Object> sharedProduct = productLine(one);
@@ -461,10 +470,14 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
         BigDecimal beforeTwo = row(two, "commission_amount");
 
         NewCustomer customer = arriveAsEnquiry("QA COMM 211");
-        sell(customer, List.of(serviceLine(List.of(share(one, "50"), share(two, "50")))),
-             ZERO, false);
+        int billId = sell(customer,
+                List.of(serviceLine(List.of(share(one, "50"), share(two, "50")))),
+                ZERO, false);
         assertSameDay(day);
 
+        BigDecimal net = Steps.netPayable(billId);
+        assertEquals(net.compareTo(catalogue.servicePrice), 0,
+            "the GST-off bill was taxed: net payable " + net);
         BigDecimal base = catalogue.servicePrice;
         movedBy("stylist one's commission on an untaxed bill", beforeOne,
                 row(one, "commission_amount"), commissionOn(base, "50", FIFTEEN));
@@ -490,7 +503,6 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
 
         BigDecimal serviceBeforeOne = row(one, "service_commission");
         BigDecimal productBeforeOne = row(one, "product_commission");
-        BigDecimal productBeforeTwo = row(two, "product_commission");
 
         sell(arriveAsEnquiry("QA COMM 205 a"), List.of(productLine(one)), ZERO, null);
         movedBy("stylist one's product commission", productBeforeOne,
@@ -498,11 +510,14 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
         movedBy("stylist one's service commission on a product sale", serviceBeforeOne,
                 row(one, "service_commission"), ZERO);
 
-        BigDecimal productBeforeTwo2 = row(two, "product_commission");
+        BigDecimal productBeforeTwo = row(two, "product_commission");
+        BigDecimal serviceBeforeTwo = row(two, "service_commission");
         sell(arriveAsEnquiry("QA COMM 205 b"), List.of(productLine(two)), ZERO, null);
         assertSameDay(day);
-        movedBy("stylist two's product commission", productBeforeTwo2,
+        movedBy("stylist two's product commission", productBeforeTwo,
                 row(two, "product_commission"), commissionOn(base, "100", FIFTEEN));
+        movedBy("stylist two's service commission on a product sale", serviceBeforeTwo,
+                row(two, "service_commission"), ZERO);
         assertNotEquals(commissionOn(base, "100", FIVE).compareTo(
                         commissionOn(base, "100", FIFTEEN)), 0,
             "the two product rates must differ for this test to prove anything");
@@ -542,9 +557,11 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
         movedBy("mixed bill - stylist two's product commission", productTwoBefore,
                 row(two, "product_commission"), commissionOn(productBase, "100", FIFTEEN));
 
-        assertEquals(staffOnLine(billId, 0).size(), 2,
+        int serviceLine = lineIndexOfType(billId, "service");
+        int productLine = lineIndexOfType(billId, "product");
+        assertEquals(staffOnLine(billId, serviceLine).size(), 2,
             "the service line lost its split when a product shared the bill");
-        assertEquals(shareOf(billId, 1, two).compareTo(HUNDRED), 0,
+        assertEquals(shareOf(billId, productLine, two).compareTo(HUNDRED), 0,
             "the product line should belong to one person at 100, not carry a share");
     }
 
@@ -605,10 +622,17 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
                     row(one, "commission_amount"), newSale);
         } finally {
             // Leave the shared pair on its documented rates for later cases.
-            Steps.attemptCommissionUpdate(SALON, one, Map.of(
+            Response restore = Steps.attemptCommissionUpdate(SALON, one, Map.of(
                     "service_pct", FIFTEEN,
                     "product_pct", FIVE,
                     "membership_pct", 0));
+            assertEquals(restore.statusCode(), 200,
+                "could not restore stylist one's rate: " + Steps.redacted(restore));
+            Map<String, Object> restored = commissionBlock(oneName);
+            assertEquals(rateOf(restored, "current", "service_pct").compareTo(FIFTEEN), 0,
+                "the restore left the service rate at " + restored.get("current"));
+            assertEquals(rateOf(restored, "current", "product_pct").compareTo(FIVE), 0,
+                "the restore left the product rate at " + restored.get("current"));
         }
     }
 
@@ -646,10 +670,13 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
                     row(one, "commission_amount"),
                     commissionOn(catalogue.servicePrice, "100", FIFTEEN));
         } finally {
-            Steps.attemptCommissionUpdate(SALON, one, Map.of(
+            Response restore = Steps.attemptCommissionUpdate(SALON, one, Map.of(
                     "service_pct", FIFTEEN,
                     "product_pct", FIVE,
                     "membership_pct", 0));
+            assertEquals(restore.statusCode(), 200,
+                "could not restore stylist one's rate after scheduling: "
+              + Steps.redacted(restore));
         }
     }
 
@@ -724,7 +751,7 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
     @Test(description = "API-E2E-208b a 0% stylist earns nothing on a sale")
     public void e2e208b_zeroCommission() {
         LocalDate day = Steps.today();
-        String name = "QA COMM zero " + System.nanoTime() % 100000;
+        String name = "QA COMM zero " + System.nanoTime();
         int zero = Steps.createStaffWithCommission(SALON, name, ZERO, ZERO);
 
         NewCustomer customer = arriveAsEnquiry("QA COMM 208 zero");
@@ -812,8 +839,16 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
                                          "QA COMM 210 over-refund"), 422,
             "a refund larger than the bill was accepted");
 
-        assertEquals(Steps.repeatPayment(billId, BigDecimal.ONE, "cash") >= 400, true,
-            "a refunded bill accepted another payment");
+        Map<String, BigDecimal> paymentsBefore = Reports.snapshot(SALON, List.of(Reports.PAYMENTS));
+        assertEquals(Steps.repeatPayment(billId, BigDecimal.ONE, "cash"), 409,
+            "a refunded bill did not refuse another payment with 409");
+        Map<String, BigDecimal> paymentsAfter = Reports.snapshot(SALON, List.of(Reports.PAYMENTS));
+        movedBy("money collected by a refused repeat payment",
+                paymentsBefore.get("payments.total_collected"),
+                paymentsAfter.get("payments.total_collected"), ZERO);
+        movedBy("payment count after a refused repeat payment",
+                paymentsBefore.get("payments.payments_count"),
+                paymentsAfter.get("payments.payments_count"), ZERO);
     }
 
     // =====================================================================
@@ -922,7 +957,7 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
     @Test(description = "API-E2E-215 commission rounds the summed base, not each bill")
     public void e2e215_roundingIsOnTheSummedBase() {
         LocalDate day = Steps.today();
-        String name = "QA COMM round " + System.nanoTime() % 100000;
+        String name = "QA COMM round " + System.nanoTime();
         int odd = Steps.createStaffWithCommission(SALON, name, FIFTEEN, FIFTEEN);
 
         BigDecimal discounted = Money.round(
