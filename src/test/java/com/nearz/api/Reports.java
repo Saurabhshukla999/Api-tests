@@ -66,7 +66,7 @@ public final class Reports {
                            "failed_refunded_amount"),
         CUSTOMERS, List.of("new_customers", "total_spend_in_range"),
         SERVICES,  List.of("total_revenue", "services_sold"),
-        STAFF,     List.of("total_service_revenue"),
+        STAFF,     List.of("total_service_revenue", "total_commission"),
         // Reports::ProfitQuery#summary. The cost side was added for Block 8:
         //   operating_expenses  sum of DEBIT expense rows dated in the range.
         //                       Measured 7 Sep 2026: CREDIT rows are excluded,

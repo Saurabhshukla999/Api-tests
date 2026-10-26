@@ -94,11 +94,19 @@ to zero; add explicit presence assertions when absence itself should fail.
 | Block8ExpenseTest | 171–180, expense ledger and profit |
 | Block9DashboardTest | 181–185, dashboard reconciliation |
 | Block10CompositeTest | 186–200, combined journeys |
+| Block11StaffCommissionTest | 201–216, per-category commission, shared-service split, refunds, report cross-check |
+
+Block 11 targets the live per-category commission model (`commission` object with
+`service_pct`, `product_pct`, `membership_pct`) and the shared-service billing
+form `staff: [{staff_id, share}]`. Membership commission remains out of scope;
+`membership_pct` is sent only because the API requires it in the object. The
+class documents the measured rules in its header, and the open ambiguities in
+[DEFECTS.md](DEFECTS.md) under "Commission and shared service".
 
 Ranges are identifiers, not a count of currently executing methods. Some cases
 are skipped or removed as duplicates. Search annotations and `SkipException`
 for current status. `testng.xml` runs CRUD, then blocks 1, 4, 5, 6, 7, 8, 9, 10,
-2 and 3, serially. XML excludes `known-defect`; direct `-Dtest` selection bypasses
+11, 2 and 3, serially. XML excludes `known-defect`; direct `-Dtest` selection bypasses
 the XML, so use the explicit group filters in [setup](../SETUP.md).
 
 ## State, isolation and failure boundaries
