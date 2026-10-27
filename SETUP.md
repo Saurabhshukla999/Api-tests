@@ -238,5 +238,28 @@ and customer data: keep reports local or redact them before sharing.
 | Known defect fails | Compare with `docs/DEFECTS.md`; preserve the regression assertion |
 | HTTP 200 but missing record | Inspect JSON; the API can return `error: not_found` with 200 |
 
+## 6. Running with Docker
+
+You can run the tests in an isolated container without installing JDK 17 or Maven locally:
+
+```sh
+# Build the test runner image
+docker compose build
+
+# Run offline toolchain/JSON smoke test
+docker compose run --rm api-tests
+
+# Run tests against local backend running on Docker/localhost (port 3000)
+docker compose run --rm api-tests mvn test "-DbaseUrl=http://host.docker.internal:3000"
+
+# Run tests against staging
+docker compose run --rm api-tests mvn test "-DbaseUrl=https://apistaging.nearz.in"
+
+# Run a specific journey or block
+docker compose run --rm api-tests mvn test "-Dtest=Block1EnquiryTest#e2e001_enquiryToSettledBill" "-DexcludedGroups=known-defect"
+```
+
+Allure results are written to `./allure-results` on the host machine.
+
 See [technical architecture](docs/ARCHITECTURE.md) and
 [agent harness](docs/AGENT_HARNESS.md) for implementation and contribution rules.
