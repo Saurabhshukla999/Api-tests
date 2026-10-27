@@ -51,6 +51,7 @@ still-open defect cannot hide the other twelve.
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
+| **C1-C4** commission and shared service | **OPEN / AMBIGUOUS** | empty `staff: []` settles unattributed; `staff` is an object for one person and an array for two; reversal counters stay 0 after refunds; a just-created staff member is briefly refused by billing. Details under "Commission and shared service" below |
 
 Not mechanically re-testable, and unchanged: **D5** and **D7** (broad sweeps),
 **D10** (needs a month of data on 4536), **D13/D14** (a permanent data state on
@@ -567,3 +568,88 @@ write had succeeded. The test passed on two later runs, so this is recorded as
 an observed response/write split rather than a reproducible failure.
 `Steps.convertEnquiry` now throws with the redacted response body, so the next
 occurrence carries the reason instead of only the status code.
+
+---
+
+## Commission and shared service (measured 26 October 2026)
+
+Block 11 (`Block11StaffCommissionTest`, API-E2E-201..216) exercises the live
+per-category commission model and the shared-service billing form. The payout
+arithmetic is correct on every scenario run; what follows is what the contract
+does NOT say clearly, plus one field that looks dead.
+
+Confirmed, and asserted by Block 11:
+
+```
+staff.commission = { service_pct, product_pct, membership_pct, effective_from? }
+                    all three percentages required together, 0..100
+bill item.staff  = [ { staff_id, share }, ... ]   (services only)
+shares           sum to exactly 100, each > 0, each person once, same salon
+commission       round( sum( share% x line net-of-GST-after-discounts ), 2 ) x own rate
+refunds          scale the base by the unrefunded ratio
+freeze           the rate is captured at settlement; later edits never re-price
+```
+
+### C1 - an empty `staff` array is accepted and silently unattributed
+
+`items: [{ type: "service", ..., staff: [] }]` answers **201**, settles, and
+moves **no** commission for anybody. Sending no names at all is the same shape a
+client produces when its staff picker fails to load. There is no warning and no
+`unattributed` flag on the line, so the sale exists and the payroll is short by
+one service. Expected by the documented rule is arguably a 422 ("choose at least
+one staff member"), by the legacy untagged-product behaviour it is acceptable.
+Recorded as an ambiguity; API-E2E-204 pins the money consequence (nobody is
+paid, nothing doubles) rather than asserting it is right.
+
+### C2 - the `staff` block changes type with its length
+
+On the bill read endpoint the same key is an object for one person and an array
+for two:
+
+```json
+"staff": {"staff_id": 1011, "name": "...", "share": 100.0}
+"staff": [{"staff_id": 1003, "name": "...", "share": 50.0},
+          {"staff_id": 1004, "name": "...", "share": 50.0}]
+```
+
+A client that loops over `staff` breaks on every single-staff bill; one that
+reads `staff.share` breaks on every shared bill. Block 11 reads both shapes
+defensively, and API-E2E-214 asserts the one-name form stores share 100.
+Correctness is not affected - only every consumer of the response.
+
+### C3 - `commission_reversed` and `refund_adjustments` stay 0 when money is reversed
+
+After a 590 part refund on a 1,180 shared bill, `commission_amount` fell by 37.5
+for each stylist (50% of their 75) while both fields stayed exactly `0`.
+Reproduced on a full refund too: the payout went to zero, both counters stayed
+zero. Either they track a reversal flow the till never uses, or they are
+exposed before being wired. Do not build a "reversed" column on them without
+confirming the intended semantics. Block 11 asserts the payout, not these
+fields, so a fix will not break it.
+
+### C4 - a freshly created staff member can be refused by billing for a short window
+
+A staff member created seconds earlier appears in the roster
+(`GET /salons/{salon}/staff?q=...` -> 200) but a bill naming them can answer:
+
+```
+422 Choose staff from this salon for "QA Haircut"
+```
+
+The same request succeeds a minute later with no change. Observed twice on
+26 October 2026 (staff 1010, then again while building the rounding case), not
+reproduced on a third staff created and billed immediately afterwards. Block 11
+retries the bill **once** on exactly that message, inside `openBill`, and any
+second refusal fails the test. This is the only sleep in the class and it is a
+workaround, not a timing assumption.
+
+### Also measured, deliberately not asserted as defects
+
+- 100/0 is refused ("Each share ... must be more than 0%"), so there is no
+  zero-share form of a shared service.
+- A product line cannot be shared at all ("Only a service can be shared between
+  staff"); product commission is single-staff by design.
+- More than two staff share one line without complaint; shares still must total
+  100. No cap was found.
+- The legacy `commission_type`/`commission_value` pair and the new `commission`
+  object are mutually exclusive: sending both answers **400**.

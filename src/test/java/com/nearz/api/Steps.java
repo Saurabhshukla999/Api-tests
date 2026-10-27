@@ -590,6 +590,117 @@ public final class Steps {
     }
 
     /**
+     * Hire a stylist on the per-category commission scheme (Release 2.0).
+     *
+     * The live API takes ONE commission object per staff member:
+     *
+     *     commission: { service_pct, product_pct, membership_pct, effective_from? }
+     *
+     * All three percentages are required when the object is sent, each a number
+     * from 0 to 100 - a partial object is refused with 422. `membership_pct`
+     * must be sent even though membership commission is out of scope; omitting
+     * it fails the request, it is not defaulted. Omitting `commission`
+     * altogether is accepted and stores 0/0/0.
+     *
+     * The legacy `commission_type`/`commission_value` pair still works and the
+     * two shapes are mutually exclusive (400 if both are sent).
+     */
+    public static int createStaffWithCommission(String salonId, String name,
+                                                BigDecimal servicePct,
+                                                BigDecimal productPct) {
+        String phone = newPhone();
+        String email = "qa" + phone + "@example.test";
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        body.put("phone", phone);
+        body.put("email", email);
+        body.put("job_title", "Beautician");
+        body.put("experience_years", 3);
+        body.put("shift_start", "09:00");
+        body.put("shift_end", "21:00");
+        body.put("weekly_off", List.of());
+        body.put("status", "active");
+        body.put("salon_service_ids", List.of());
+        body.put("commission", Map.of(
+                "service_pct", servicePct,
+                "product_pct", productPct,
+                "membership_pct", 0));
+
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId).body(body)
+                .when().post("/salons/{salonId}/staff")
+                .then()
+                .statusCode(201)
+                .body("data.commission.current.service_pct", equalTo(servicePct.floatValue()))
+                .body("data.commission.current.product_pct", equalTo(productPct.floatValue()))
+                .extract().jsonPath().getInt("data.id");
+    }
+
+    /**
+     * PATCH a staff member's commission object. Returns the response rather
+     * than asserting a status: the same call is used for a valid rate change
+     * (200) and for every rejected shape (400/422).
+     */
+    public static Response attemptCommissionUpdate(String salonId, int staffId,
+                                                   Map<String, Object> commission) {
+        return given().spec(Api.journey())
+                .pathParam("salonId", salonId).pathParam("id", staffId)
+                .body(Map.of("commission", commission))
+                .when().patch("/salons/{salonId}/staff/{id}");
+    }
+
+    /**
+     * The staff row as the roster list reports it.
+     *
+     * GET /salons/{salon}/staff/{id} answers 404 on the live API, and the list
+     * is paginated (per_page defaults to 20 on a salon with 500+ staff), so the
+     * caller names the person. This is the only read that exposes the
+     * effective-dated `commission` block: `current`, `scheduled` and `history`.
+     */
+    public static Map<String, Object> staffRecord(String salonId, String name) {
+        JsonPath body = given().spec(Api.journey())
+                .pathParam("salonId", salonId)
+                .queryParam("q", name).queryParam("limit", 50)
+                .when().get("/salons/{salonId}/staff")
+                .then().statusCode(200).extract().jsonPath();
+        List<Map<String, Object>> list = body.getList("data.items");
+        if (list != null) {
+            for (Map<String, Object> row : list) {
+                if (name.equals(row.get("name"))) {
+                    return row;
+                }
+            }
+        }
+        throw new AssertionError("staff '" + name + "' is not in the roster list");
+    }
+
+    /**
+     * POST a draft bill without asserting the outcome, for allocation probes
+     * whose correct answer is a refusal.
+     */
+    public static Response attemptBill(int customerId, List<Map<String, Object>> items,
+                                       BigDecimal discountPct, Boolean gstEnabled) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customer_id", customerId);
+        body.put("status", "draft");
+        body.put("items", items);
+        if (discountPct != null && discountPct.signum() > 0) {
+            body.put("discount", Map.of("pct", discountPct, "flat", 0));
+        }
+        if (gstEnabled != null) {
+            Map<String, Object> tax = new LinkedHashMap<>();
+            tax.put("gst_enabled", gstEnabled);
+            if (!gstEnabled) {
+                tax.put("reason", "QA commission journey: GST off for exact arithmetic");
+            }
+            body.put("tax", tax);
+        }
+        return given().spec(Api.journey())
+                .body(body)
+                .when().post("/api/v1/billing/bills");
+    }
+
+    /**
      * A bill from raw line maps, so a caller can put a DIFFERENT staff_id on
      * each line. Every other createBill puts one stylist on the whole basket,
      * which cannot express "the cut was Priya, the blow-dry was Sam".
@@ -761,6 +872,11 @@ public final class Steps {
     public static Map<String, Object> staffRow(String salonId, int staffId) {
         JsonPath rows = given().spec(Api.journey())
                 .pathParam("salonId", salonId)
+                // The report is paginated (100 a page) and salon 4550 now has
+                // 500+ people on the roster, so an unfiltered read misses the
+                // person under test as soon as they fall off page one. The
+                // server-side filter returns exactly one row.
+                .queryParam("staff_id", staffId)
                 .queryParam("range", "today").queryParam("limit", 200)
                 .queryParam("_qa", System.nanoTime())
                 .when().get("/salons/{salonId}/reports/staff_performance/rows")

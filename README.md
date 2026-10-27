@@ -156,7 +156,8 @@ in those words, with the before and after values.
 | `Block7InventoryTest.java` | API-E2E-151..170 — products and inventory |
 | `Block8ExpenseTest.java` | API-E2E-171..180 — expenses and profit |
 | `Block9DashboardTest.java` | API-E2E-181..185 — dashboard vs the reports |
-| `Block10CompositeTest.java` | API-E2E-186..200 — composite mega-journeys |
+| `Block10CompositeTest.java` | API-E2E-186..200 - composite mega-journeys |
+| `Block11StaffCommissionTest.java` | API-E2E-201..216 - per-category commission and shared-service splits |
 | `ProductCrudTest.java` | Plain CRUD on products — the shape to read first |
 | `VerifyDefectsTest.java` | On-demand defect audit. Prints a verdict, does not assert |
 

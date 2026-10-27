@@ -50,6 +50,10 @@
     <classes><class name="com.nearz.api.Block10CompositeTest"/></classes>
   </test>
 
+  <test name="Block 11 - staff commission and shared service (API-E2E-201..216)">
+    <classes><class name="com.nearz.api.Block11StaffCommissionTest"/></classes>
+  </test>
+
   <test name="Block 2 - payments and settlement (API-E2E-076..100)">
     <classes><class name="com.nearz.api.Block2PaymentTest"/></classes>
   </test>
