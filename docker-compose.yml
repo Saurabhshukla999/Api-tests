@@ -1,0 +1,17 @@
+services:
+  api-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nearz-api-tests:latest
+    container_name: nearz-api-test-runner
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./allure-results:/app/allure-results
+      - ./src/test/resources:/app/src/test/resources
+    environment:
+      - MAVEN_OPTS=-Dfile.encoding=UTF-8
+    # Run the offline verification test by default. Override command as needed, e.g.:
+    # docker compose run --rm api-tests mvn test -DbaseUrl=http://host.docker.internal:3000
+    command: ["mvn", "test", "-Dtest=LocalRuntimeTest"]

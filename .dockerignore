@@ -1,0 +1,13 @@
+target/
+.allure/
+allure-results/
+.git
+.idea
+*.iml
+.classpath
+.project
+.settings
+*.log
+*.err
+bin/
+_to_delete/
