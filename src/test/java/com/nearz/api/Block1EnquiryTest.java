@@ -546,13 +546,15 @@ public class Block1EnquiryTest extends BaseJourneyTest {
         assertBillIsPaidBy(kept, customer);
 
         // Two bills were raised; the first was fully refunded. Revenue and
-        // payments keep only the second, but bills_count keeps both: a refund
-        // reverses money, not the fact that a bill was raised.
+        // money collected keep only the second, but bills_count and
+        // payments_count keep both: a refund reverses money, not the fact that
+        // a bill was raised or a payment was taken (confirmed 2 Nov 2026,
+        // see D24 in docs/DEFECTS.md).
         BigDecimal survives = gross(1, 0, ZERO);
         expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
-        expectMoved(before, after, "payments.payments_count", ONE);
+        expectMoved(before, after, "payments.payments_count", new BigDecimal("2"));
         expectMoved(before, after, "customers.total_spend_in_range", survives);
         expectMoved(before, after, "customers.new_customers", ONE);
         expectMoved(before, after, "payments.failed_refunded_amount", reversed);
