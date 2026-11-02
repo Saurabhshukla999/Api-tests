@@ -261,5 +261,37 @@ docker compose run --rm api-tests mvn test "-Dtest=Block1EnquiryTest#e2e001_enqu
 
 Allure results are written to `./allure-results` on the host machine.
 
+### Preparing the local Docker backend (measured 2 Nov 2026)
+
+Until a staging environment exists, the suite runs against the backend's own
+development stack (`Nearz_B2B/backend/docker/development`, `new_master_aws`).
+Pass `baseUrl=http://localhost:3000`, the local salon id for all three
+`*SalonId` keys and a local token for the three `*Token` keys as `-D` overrides.
+A fresh stack needs this first:
+
+1. **Notifications off.** The dev stack has no Firebase key, so every booking
+   answered 500, and it inherits the real Slack webhooks. Set
+   `DISABLE_EXTERNAL_NOTIFICATIONS: 'true'` on the `web` and `sidekiq`
+   services; the backend then skips FCM and Slack outside production.
+2. **Seed data.** Run `bundle exec rails db:seed` in the web container
+   (`bin/rails` has CRLF endings on a Windows checkout and will not start).
+   `salon_setup:seed` is broken against the current `User` model, so create a
+   `salon_owner` user and its salon with `rails runner`, and mint the token
+   with `JsonWebToken.encode(user_id: ...)`.
+3. **GST on.** A new salon has GST off and the GST journeys refuse to run.
+   Create its `SalonTax` with a GSTIN and 9% CGST + 9% SGST.
+4. **Time zone.** `config.time_zone` is `Asia/Calcutta`; the Postgres 15
+   image (Debian 13) only ships `Asia/Kolkata`, and every report answers 500.
+   Install `tzdata-legacy` in the `db` container (lost when it is recreated).
+
+Bookings are made for today, between 10:00 and 19:30, in slots that have not
+started yet. With the 40-stylist roster that is 760 places a day, so start a
+full run early in the day and run it at most once per day. A run started late
+fails with "today's calendar is full".
+
+The local stack answers far faster than QA, which is why `Steps` waits out the
+enquiry write throttle (60 per user per minute). Known differences from the QA
+server are recorded in [DEFECTS.md](docs/DEFECTS.md) (D20, D21, D24, SW-8).
+
 See [technical architecture](docs/ARCHITECTURE.md) and
 [agent harness](docs/AGENT_HARNESS.md) for implementation and contribution rules.

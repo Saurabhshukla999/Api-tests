@@ -75,13 +75,13 @@ public final class Steps {
     public static int createEnquiry(String salonId, String name, String phone) {
         String notes = "QA enquiry " + System.currentTimeMillis();
         String followUp = LocalDate.now().plusDays(2).toString();
-        return given().spec(Api.journey())
+        return withinEnquiryWriteLimit(() -> given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .body(Map.of("enquiry", Map.of(
                         "name", name, "phone", phone, "interest", "QA Haircut",
                         "source", "Walk-in", "notes", notes,
                         "follow_up_date", followUp)))
-                .when().post("/salons/{salonId}/enquiries")
+                .when().post("/salons/{salonId}/enquiries"))
                 .then()
                 .statusCode(201)
                 .body("data.source", equalTo("Walk-in"))
@@ -99,15 +99,44 @@ public final class Steps {
      * test of its own.
      */
     public static int attemptEnquiry(String salonId, String name, String phone) {
-        return given().spec(Api.journey())
+        return withinEnquiryWriteLimit(() -> given().spec(Api.journey())
                 .pathParam("salonId", salonId)
                 .body(Map.of("enquiry", Map.of(
                         "name", name, "phone", phone, "interest", "QA Haircut",
                         "source", "Walk-in",
                         "notes", "QA duplicate-probe enquiry",
                         "follow_up_date", LocalDate.now().plusDays(2).toString())))
-                .when().post("/salons/{salonId}/enquiries")
+                .when().post("/salons/{salonId}/enquiries"))
                 .then().extract().statusCode();
+    }
+
+    /**
+     * Send an enquiry write, waiting out the API's write throttle if it trips.
+     *
+     * EnquiriesController allows 60 writes (create, update, destroy, convert)
+     * per user per minute, in a fixed window keyed on the epoch minute, and
+     * every journey spends two (create + convert). Against the local Docker
+     * backend the suite runs five times faster than against QA and crossed the
+     * limit: 36 of 202 journeys failed with 429 on 2 Nov 2026.
+     *
+     * The throttle is the first statement of both actions, so a 429 means
+     * nothing was written - waiting for the next window and sending the same
+     * call again is not a blind retry. Any other status is returned untouched.
+     */
+    private static Response withinEnquiryWriteLimit(
+            java.util.function.Supplier<Response> call) {
+        Response response = call.get();
+        for (int wait = 1; wait <= 2 && response.statusCode() == 429; wait++) {
+            long intoMinute = System.currentTimeMillis() % 60_000L;
+            try {
+                Thread.sleep(60_000L - intoMinute + 1_000L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            response = call.get();
+        }
+        return response;
     }
 
     /** Everyone the salon knows by this name or number. */
@@ -121,11 +150,12 @@ public final class Steps {
 
     /** Returns the salon_customer_profile id the enquiry became. */
     public static int convertEnquiry(String salonId, int enquiryId) {
-        io.restassured.response.Response response = given().spec(Api.journey())
-                .pathParam("salonId", salonId)
-                .pathParam("id", enquiryId)
-                .body(Map.of())
-                .when().post("/salons/{salonId}/enquiries/{id}/convert");
+        io.restassured.response.Response response = withinEnquiryWriteLimit(() ->
+                given().spec(Api.journey())
+                        .pathParam("salonId", salonId)
+                        .pathParam("id", enquiryId)
+                        .body(Map.of())
+                        .when().post("/salons/{salonId}/enquiries/{id}/convert"));
         if (response.statusCode() != 200) {
             throw new AssertionError(
                 "converting enquiry " + enquiryId + " answered "
