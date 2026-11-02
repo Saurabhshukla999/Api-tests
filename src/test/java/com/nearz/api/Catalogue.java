@@ -346,7 +346,9 @@ public final class Catalogue {
      * Salon 4550 is shared, and a stylist that someone assigns to a different
      * service - or duplicates in the dashboard - gets refused with "X is not
      * assigned to QA Haircut". Striking them off is better than failing the
-     * journey over someone else's edit.
+     * journey over someone else's edit. The same applies to a stylist marked
+     * absent or on leave today (see Steps.isOffToday). A strike lasts only as
+     * long as this Catalogue, which is one test class.
      */
     public void doNotUse(int staffId) {
         unusableStaff.add(staffId);

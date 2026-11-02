@@ -182,6 +182,10 @@ public final class Steps {
                 catalogue.doNotUse(slot.staffId());   // someone changed their skills
                 continue;
             }
+            if (isOffToday(body)) {
+                catalogue.doNotUse(slot.staffId());   // out for the day, see below
+                continue;
+            }
             throw new AssertionError(
                 "booking an appointment failed with " + response.statusCode()
               + " at " + slot.start() + " for stylist " + slot.staffId()
@@ -191,6 +195,24 @@ public final class Steps {
             "could not find a free slot after 25 attempts on " + LocalDate.now()
           + ". Today's calendar is effectively full; wait for tomorrow or raise "
           + "ROSTER in Catalogue.java.");
+    }
+
+    /**
+     * The API refused the stylist because they are out for the whole day.
+     *
+     * StaffAvailability refuses a booking for a stylist whose attendance is
+     * absent or on_leave for that date ("X is marked absent on 23 Oct 2026",
+     * "X is marked on leave on ..."), or who has approved leave ("X is on
+     * approved leave on ..."). Block 6 marks its own hires absent on purpose,
+     * so a roster that ever offered one of them failed every later block on
+     * its first bookings - 12 of the 15 failures on 23 Oct 2026. The journey
+     * under test is about money, not attendance, so the stylist is struck off
+     * for the rest of the class and the next free one is used.
+     */
+    private static boolean isOffToday(String body) {
+        return body.contains(" is marked absent on ")
+            || body.contains(" is marked on leave on ")
+            || body.contains(" is on approved leave on ");
     }
 
     /**

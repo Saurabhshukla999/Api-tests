@@ -49,6 +49,7 @@ still-open defect cannot hide the other twelve.
 | **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
+| **D24** fully refunded payment stays in `payments_count` | **OPEN** | refund one bill, settle a second for the same customer: `payments_count` moved **+2** (15 → 17, 172 → 174); swagger and backend source both exclude a payment refunded in full |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 | **C1-C4** commission and shared service | **OPEN / AMBIGUOUS** | empty `staff: []` settles unattributed; `staff` is an object for one person and an array for two; reversal counters stay 0 after refunds; a just-created staff member is briefly refused by billing. Details under "Commission and shared service" below |
@@ -568,6 +569,78 @@ write had succeeded. The test passed on two later runs, so this is recorded as
 an observed response/write split rather than a reproducible failure.
 `Steps.convertEnquiry` now throws with the redacted response body, so the next
 occurrence carries the reason instead of only the status code.
+
+## Found 23 October 2026 (full serialized run, 15 failures)
+
+The 23 Oct run failed 15 journeys. Twelve were a test defect, two are D24
+below, and one is D21 (`e2e010_twoAppointmentsTwoBills`, `new_customers`
+moved 0 instead of 1).
+
+### D24 — a fully refunded payment is still counted in `payments.payments_count`
+
+The spec (`reports.json`, Payments summary) is explicit:
+
+> `payments_count` — "Number of payments that collected money. A payment
+> refunded in full is excluded here and from average_payment; a partial refund
+> still counts as one payment, net of what was returned."
+
+Two journeys raise and settle a bill, refund it in full, then raise and settle
+a second bill for the same customer. Exactly one payment survives, so the count
+should move by 1:
+
+| case | expected | actual | `payments_count` |
+|---|---|---|---|
+| `Block1EnquiryTest#e2e020_refundThenNewSale` | +1 | +2 | 15 → 17 |
+| `Block3RefundTest#e2e125_settleRefundSellAgain` | +1 | +2 | 172 → 174 |
+
+`payments.total_collected` moved by exactly one bill on the same runs (that
+assertion runs first and passed), so the refunded row nets to zero for revenue.
+Only the count still includes it.
+
+These assertions were never evaluated before 22 Oct 2026. Until then both
+journeys stopped at the `bills_count` check above them (D20); commit `3790c1e`
+aligned `bills_count` with the swagger change, and `payments_count` became the
+next assertion to run.
+
+**The backend source disagrees with the live API.** In `Nearz_B2B/backend`
+(`new_master_aws`, and every remote branch checked), `Reports::PaymentsQuery#count_for`
+is `BillPayment.collected_for(...).not_fully_refunded.count`, and
+`not_fully_refunded` is `amount - COALESCE(refunded_amount, 0) > 0`
+(commit `c609ee4`, 24 Aug 2026). `Billing::RefundProcessor#allocate_to_payments!`
+writes `refunded_amount` on the payment rows. By the source the count should move
++1. The likeliest explanation is that `testnearz.co.in` is running a build
+without that change; confirm the deployed commit before treating this as new
+code. D21 looks the same: `Reports::CustomersQuery#kpis` in the local source
+classifies a customer as returning only when `first_visit_date` is before the
+range start, which would count `e2e010`'s customer as first-time.
+
+The assertions stay as they are (`ONE`): they match the spec and the source.
+
+### Test defect — stylists Block 6 had marked absent were offered to later blocks
+
+The other twelve failures (`e2e079`, `e2e080`, `e2e101`, `e2e102`, `e2e152`,
+`e2e160`, `e2e178`, `e2e180`, `e2e181`, `e2e182`, `e2e186`, `e2e187`) were all
+the first two bookings of a block, refused with:
+
+```
+422 {"error":["QA E2E-127 400 is marked absent on 23 Oct 2026"]}   staff 970
+422 {"error":["QA E2E-129 60700 is marked absent on 23 Oct 2026"]} staff 972
+```
+
+Block 6 (E2E-127, E2E-129) hires those stylists and marks them absent for the
+day. The run used uncommitted work in `Catalogue.roster()` (since stashed as
+`wip swagger-key-alignment before master switch`) that reused every active
+"QA E2E-..." stylist instead of only "QA Stylist N", so later blocks were
+offered them. The backend refuses a booking for an absent stylist; that has been
+in `StaffAvailability#attendance_error` since `1ee14c1` (20 Aug 2026), so this
+was not a backend change. `Steps.bookAppointment` handled only "already has a
+booking" and "is not assigned to", and failed outright.
+
+Fix: `Steps.bookAppointment` now strikes a stylist off for the rest of the
+class when the API answers "is marked absent on", "is marked on leave on" or
+"is on approved leave on", and books the next free slot. The committed roster
+still uses only "QA Stylist N". Do not reapply that stash unless it also leaves
+out stylists who are off today.
 
 ---
 

@@ -102,9 +102,14 @@ public class Block6StaffTest extends BaseJourneyTest {
      * API-E2E-127 marked absent.
      *
      * The rule under test is what the API ACTUALLY does, not what it might be
-     * expected to do: attendance and the calendar are independent, so a booking
-     * for an absent stylist is accepted. That is worth pinning down, because a
-     * salon that assumes otherwise will double-book a stylist who is off.
+     * expected to do. This was written believing attendance and the calendar
+     * were independent; the backend has in fact consulted attendance since
+     * 20 Aug 2026 (StaffAvailability#attendance_error), and live answers 422
+     * "X is marked absent on <date>". The assertion accepts either outcome and
+     * prints which one it saw.
+     *
+     * The stylist stays absent for the rest of the day, so later blocks must
+     * never be offered it: Steps.bookAppointment strikes such a stylist off.
      */
     @Test(description = "API-E2E-127 an absent stylist is still bookable, and counted absent")
     public void e2e127_absentIsCountedAndStillBookable() {
@@ -121,7 +126,7 @@ public class Block6StaffTest extends BaseJourneyTest {
         assertTrue(board.getInt("data.summary.absent") >= 1,
             "the absent count did not move");
 
-        // The calendar does not consult attendance. Recorded, not judged.
+        // Booking consults attendance, so a refusal is the expected answer.
         NewCustomer customer = arriveAsEnquiry("QA E2E-127");
         Catalogue.Booking slot = catalogue.nextFreeSlotFor(staffId);
         int status = Steps.attemptBooking(SALON, customer.name(), customer.phone(),
@@ -131,7 +136,9 @@ public class Block6StaffTest extends BaseJourneyTest {
         assertTrue(status == 200 || status >= 400,
             "unexpected status " + status + " when booking an absent stylist");
         System.out.println("  [E2E-127] booking a stylist marked ABSENT answered "
-                + status + " - attendance and the calendar are independent.");
+                + status + (status == 200
+                        ? " - the calendar accepted an absent stylist."
+                        : " - the calendar refused an absent stylist."));
     }
 
     @Test(description = "API-E2E-128 present, completed, paid - and credited on the report")
