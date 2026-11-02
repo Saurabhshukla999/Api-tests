@@ -45,7 +45,7 @@ still-open defect cannot hide the other twelve.
 | | verdict | evidence |
 |---|---|---|
 | **D19** refund keeps COGS booked | **OPEN** | sale +200 revenue / +100 COGS; full refund reversed the revenue and returned the stock, COGS **stayed at +100** — net profit permanently 100 short |
-| **D20** refunded bills stay in `bills_count` | **OPEN** | today's sales report: 17 rows = 14 paid + 3 refunded, and `bills_count` = **17**; the spec says fully refunded bills are excluded |
+| **D20** refunded bills stay in `bills_count` | **BY DESIGN (confirmed 2 Nov 2026); `new_master_aws` violates it** | A refund must not reduce `bills_count`; tests expect the refunded bill to stay counted since `3790c1e` (22 Oct). Originally observed: 17 rows = 14 paid + 3 refunded, and `bills_count` = **17**; the spec says fully refunded bills are excluded |
 | **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
@@ -446,6 +446,7 @@ comparison: `docs/SWAGGER_KEY_MATRIX.md`.
 | **SW-9** | bill `tax` accepts `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is present; the key is undocumented | `Steps.createBill`, `Block1EnquiryTest#e2e014` |
 | **SW-10** | appointment SHOW `service_name` "falls back to the catalogue name when the salon has not set a custom name" | SHOW always returns the **catalogue** name in `service_name` and the salon's label in `custom_name` (`Blow Dry` / `QA Blow Dry`); the calendar list promotes the custom name into `service_name` | `Block1EnquiryTest#e2e008` now asserts `custom_name` |
 | **SW-11** | the profit summary is "Revenue minus cost of goods and operating expenses", and `total_cost` is described only as "Total Cost" | `total_cost` also includes **`staff_commission`**: live today `0 opex + 3,900 COGS + 1,300 commission = 5,200`, and `net_profit = gross - total_cost`. The stated formula is short by the commission | `Reports.PROFIT` now reads `staff_commission`; `Block8ExpenseTest.assertIdentityHolds` asserts all three terms |
+| **SW-13** | `bills_count` is "Bills raised in this period, after refunds. A fully refunded bill is excluded here." | a fully refunded bill **stays** in `bills_count`; this is the confirmed product rule (D20). The swagger fix is on unmerged branch `fix/swagger-refund-bills-count` (`5a9796b`) | `BaseJourneyTest.expectFullyReversed`, `Block1EnquiryTest#e2e020`, `Block3RefundTest#e2e120`/`e2e125`, Block 10 refund journeys |
 | **SW-12** | the inventory tab's `low_stock` array and `summary.low_stock` share "identical definition ... so the KPI and the rows can never disagree"; no cap is documented | the array is a **10-row preview** (sorted by stock) while the KPI counts every product at or below reorder (21 live). The complete list is `/dashboard/action_center/low_stock`; a product at 9 vs reorder 9 is in the full list but outside the preview | `Steps.lowStockSeverity` reads the action-center list; `Block9DashboardTest#e2e182` asserts the KPI delta |
 
 Response-schema gaps that block assertions (not request alignment):
@@ -466,7 +467,30 @@ failing until the API changes; the rest of the block proceeds.
 
 ### D20 — a fully refunded bill is still counted in `sales.bills_count`
 
-The spec is explicit (`reports.json`, Sales summary):
+**Resolved as intended behaviour.** The product decision of 22 Oct 2026,
+reconfirmed by the product owner on 2 Nov 2026: a refund reverses money, not
+the fact that a bill was raised, so `bills_count` must **not** drop when a bill
+is refunded. Since commit `3790c1e` every refund journey expects the refunded
+bill to stay counted (`expectFullyReversed`, `e2e020`, `e2e120`, `e2e125`,
+`e2e192`, `e2e193`, `e2e194`, `e2e200`). The live QA server already behaves this
+way, and the swagger text below is drift (SW-13).
+
+**The production branch does not implement the rule yet.** On `new_master_aws`
+(Bitbucket tip `5702734`, pulled 2 Nov 2026), `Reports::SalesQuery#count_for`
+calls `Billing::Revenue.count`, which uses
+`counted_scope = scope.where.not(status: :refunded)`, so a fully refunded bill
+drops out. The fix exists but is unmerged:
+
+| branch | commit | change |
+|---|---|---|
+| `fix/refund-bills-count-services-sold` | `8d63ff1` (9 Oct 2026) | `count_for` and the sales timeseries use `Billing::Revenue.scope`, keeping refunded bills; also keeps Services Sold |
+| `fix/swagger-refund-bills-count` | `5a9796b` (22 Oct 2026) | swagger: keep fully refunded bills in `bills_count` |
+
+Until those are merged, a backend built from `new_master_aws` (including the
+local Docker backend) will fail the eight refund journeys above on
+`bills_count`. That is a backend gap, not a test defect.
+
+The original record follows. The spec is explicit (`reports.json`, Sales summary):
 
 > `bills_count` — "Bills raised in this period, after refunds. A fully refunded
 > bill is excluded here."
