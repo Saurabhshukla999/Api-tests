@@ -49,7 +49,7 @@ still-open defect cannot hide the other twelve.
 | **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
-| **D24** fully refunded payment stays in `payments_count` | **BY DESIGN (confirmed 2 Nov 2026)** | refund one bill, settle a second for the same customer: `payments_count` moves **+2** (15 → 17, 172 → 174). Confirmed correct by the product owner; the test expectation was wrong. The swagger text disagrees (SW-13) |
+| **D24** fully refunded payment stays in `payments_count` | **OPEN (QA server only)** | refund one bill, settle a second for the same customer: `payments_count` moved **+2** on testnearz.co.in (15 → 17, 172 → 174). Excluding a payment refunded in full is the confirmed rule (2 Nov 2026), and swagger and `new_master_aws` (`5702734`) both implement it |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 | **C1-C4** commission and shared service | **OPEN / AMBIGUOUS** | empty `staff: []` settles unattributed; `staff` is an object for one person and an array for two; reversal counters stay 0 after refunds; a just-created staff member is briefly refused by billing. Details under "Commission and shared service" below |
@@ -446,7 +446,6 @@ comparison: `docs/SWAGGER_KEY_MATRIX.md`.
 | **SW-9** | bill `tax` accepts `gst_enabled` and `mode` only | a GST-off bill is refused with *"Give a reason for switching GST off on this bill"* unless `tax.reason` is present; the key is undocumented | `Steps.createBill`, `Block1EnquiryTest#e2e014` |
 | **SW-10** | appointment SHOW `service_name` "falls back to the catalogue name when the salon has not set a custom name" | SHOW always returns the **catalogue** name in `service_name` and the salon's label in `custom_name` (`Blow Dry` / `QA Blow Dry`); the calendar list promotes the custom name into `service_name` | `Block1EnquiryTest#e2e008` now asserts `custom_name` |
 | **SW-11** | the profit summary is "Revenue minus cost of goods and operating expenses", and `total_cost` is described only as "Total Cost" | `total_cost` also includes **`staff_commission`**: live today `0 opex + 3,900 COGS + 1,300 commission = 5,200`, and `net_profit = gross - total_cost`. The stated formula is short by the commission | `Reports.PROFIT` now reads `staff_commission`; `Block8ExpenseTest.assertIdentityHolds` asserts all three terms |
-| **SW-13** | `payments_count` is "Number of payments that collected money. A payment refunded in full is excluded here and from average_payment" | a payment refunded in full **stays** in `payments_count`; only the money figures net it out. Confirmed as the intended behaviour on 2 Nov 2026 (D24) | `Block1EnquiryTest#e2e020`, `Block3RefundTest#e2e125` expect +2 |
 | **SW-12** | the inventory tab's `low_stock` array and `summary.low_stock` share "identical definition ... so the KPI and the rows can never disagree"; no cap is documented | the array is a **10-row preview** (sorted by stock) while the KPI counts every product at or below reorder (21 live). The complete list is `/dashboard/action_center/low_stock`; a product at 9 vs reorder 9 is in the full list but outside the preview | `Steps.lowStockSeverity` reads the action-center list; `Block9DashboardTest#e2e182` asserts the KPI delta |
 
 Response-schema gaps that block assertions (not request alignment):
@@ -573,29 +572,23 @@ occurrence carries the reason instead of only the status code.
 
 ## Found 23 October 2026 (full serialized run, 15 failures)
 
-The 23 Oct run failed 15 journeys. Fourteen were test defects: twelve are
-described at the end of this section, and two are the D24 expectation below.
-One is D21 (`e2e010_twoAppointmentsTwoBills`, `new_customers` moved 0
-instead of 1).
+The 23 Oct run failed 15 journeys. Twelve were a test defect, two are D24
+below, and one is D21 (`e2e010_twoAppointmentsTwoBills`, `new_customers`
+moved 0 instead of 1).
 
-### D24 — a fully refunded payment stays in `payments.payments_count` (by design)
+### D24 — a fully refunded payment is still counted in `payments.payments_count`
 
-**Resolved as intended behaviour on 2 Nov 2026.** The product owner confirmed
-that a payment refunded in full is still counted in `payments_count`; a refund
-reverses the money, not the fact that a payment was taken. This matches how
-`bills_count` treats a refunded bill (D20, aligned on 22 Oct 2026). The test
-expectation was wrong and now asserts **+2**.
-
-The swagger text says the opposite (recorded as SW-13 for the spec owner):
+The spec (`reports.json`, Payments summary) is explicit:
 
 > `payments_count` — "Number of payments that collected money. A payment
 > refunded in full is excluded here and from average_payment; a partial refund
 > still counts as one payment, net of what was returned."
 
 Two journeys raise and settle a bill, refund it in full, then raise and settle
-a second bill for the same customer. Both payments are counted:
+a second bill for the same customer. Exactly one payment survives, so the count
+should move by 1:
 
-| case | old expectation | live, now expected | `payments_count` |
+| case | expected | actual | `payments_count` |
 |---|---|---|---|
 | `Block1EnquiryTest#e2e020_refundThenNewSale` | +1 | +2 | 15 → 17 |
 | `Block3RefundTest#e2e125_settleRefundSellAgain` | +1 | +2 | 172 → 174 |
@@ -609,19 +602,25 @@ journeys stopped at the `bills_count` check above them (D20); commit `3790c1e`
 aligned `bills_count` with the swagger change, and `payments_count` became the
 next assertion to run.
 
-**Watch for a backend build that changes this.** The local backend checkout
-does *not* match the confirmed behaviour. In `Nearz_B2B/backend`
-(`new_master_aws`, and every remote branch checked on 2 Nov 2026),
+**The rule is confirmed; the QA server is behind it.** On 2 Nov 2026 the
+product owner confirmed that a payment refunded in full must drop out of
+`payments_count`. The production branch implements this: `new_master_aws` was
+pulled from Bitbucket the same day (tip `5702734`, already up to date) and
 `Reports::PaymentsQuery#count_for` is
-`BillPayment.collected_for(...).not_fully_refunded.count`, and
-`not_fully_refunded` is `amount - COALESCE(refunded_amount, 0) > 0`
-(commit `c609ee4`, 24 Aug 2026), which drops a fully refunded payment. The live
-QA server does not, so it is running a different build. If that code is
-deployed, `payments_count` will move +1 in these journeys and both tests will
-fail; that would be a backend regression against the confirmed rule, not a
-reason to change the tests back. D21 shows the same split:
-`Reports::CustomersQuery#kpis` in the local source would count `e2e010`'s
-customer as first-time, while live counts them as returning.
+`BillPayment.collected_for(...).not_fully_refunded.count`, where
+`not_fully_refunded` is `amount - COALESCE(refunded_amount, 0) > 0` (commit
+`c609ee4`, 24 Aug 2026). `Billing::RefundProcessor#allocate_to_payments!`
+writes `refunded_amount` on the payment rows. The only remote branches without
+the filter predate that commit. So `testnearz.co.in` is running an older build;
+the local Docker backend, which runs `new_master_aws`, should pass both
+journeys.
+
+D21 looks the same: `Reports::CustomersQuery#kpis` on `new_master_aws`
+classifies a customer as returning only when `first_visit_date` is before the
+range start, which would count `e2e010`'s customer as first-time.
+
+The assertions stay at `ONE`. A brief change to `+2` (commit `90b1836`) was
+reverted the same day, once the rule was confirmed.
 
 ### Test defect — stylists Block 6 had marked absent were offered to later blocks
 
