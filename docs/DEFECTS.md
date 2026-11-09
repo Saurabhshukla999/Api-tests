@@ -50,6 +50,8 @@ still-open defect cannot hide the other twelve.
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
 | **D24** fully refunded payment stays in `payments_count` | **OPEN (QA server only)** | refund one bill, settle a second for the same customer: `payments_count` moved **+2** on testnearz.co.in (15 → 17, 172 → 174). Excluding a payment refunded in full is the confirmed rule (2 Nov 2026), and swagger and `new_master_aws` (`5702734`) both implement it |
+| **D25** completing an appointment can hang for minutes | **OPEN (backend)** | `PATCH /appointments/13983/status` reset after ~4.5 min on 9 Nov 2026, yet the appointment was `Completed`. Completion sends FCM and Slack synchronously with no timeout |
+| **D26** part refund by amount refused on product bills | **OPEN (QA server only, unconfirmed rule)** | 422 "Refund the products on this bill item by item. A refund by amount gives back up to ₹0, what its services came to." No branch of the backend repo contains this rule |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 | **C1-C4** commission and shared service | **OPEN / AMBIGUOUS** | empty `staff: []` settles unattributed; `staff` is an object for one person and an array for two; reversal counters stay 0 after refunds; a just-created staff member is briefly refused by billing. Details under "Commission and shared service" below |
@@ -558,6 +560,18 @@ fully refunded bill) has `total_visits = 0`. `e2e004` was asserting the
 opposite and has been corrected to expect no movement; the two-visit case is a
 straight contradiction of the documented definition and remains red.
 
+**Re-measured 9 Nov 2026 (`e2e010`, 5 → 5).** The customers rows report
+for the new customer 4770 shows `first_visit_date 2026-11-09`,
+`total_visits 2`, `customer_type repeat`, and the summary still did not
+count them as first-time. Every branch of the backend repository that returns
+`total_spend_in_range` (the QA server does) computes
+`returning = first_visit_date < range.start_date`, which counts this customer
+as first-time (`app/queries/reports/customers_query.rb`, since `050f33e`,
+16 Aug). The old rule, `customer_type == 'repeat'` (lifetime visits > 1), is
+what the server's answer matches. So the QA deployment has the new response
+shape but not the new rule: it is built from code that is not in the
+repository. The test is right. Ask the backend team which commit is deployed.
+
 ### D22 — a valid 10-digit phone beginning `91` is truncated to 8 digits
 
 `Steps.newPhone()` generated `9100955749` for `e2e009`. The enquiry was created
@@ -756,3 +770,54 @@ workaround, not a timing assumption.
   100. No cap was found.
 - The legacy `commission_type`/`commission_value` pair and the new `commission`
   object are mutually exclusive: sending both answers **400**.
+
+## Found 9 November 2026 (full run, 201 tests, 3 failures)
+
+`e2e010` is D21 (re-measured above). The other two are new.
+
+### D25 — completing an appointment calls FCM and Slack inside the request, with no timeout
+
+`Block3RefundTest#e2e118_gstBillRefunded` sent
+`PATCH /appointments/13983/status {"status":"completed"}`. The connection
+reset after about 4.5 minutes (`java.net.SocketException: Connection reset`).
+Reading the appointment back showed `status: Completed`: the write landed and
+only the response was lost.
+
+In the backend, `set_status` calls `Appointment#complete`, whose
+`after_save :feedback_notification` runs `FcmApi.notify` (a Google OAuth token
+fetch, then `HTTParty.post` to FCM) and `SlackNotifier::CLIENT.ping`. Both run
+synchronously, inside the save's transaction, with no explicit timeout
+(`app/models/appointment.rb`, `app/services/in_app_notification_service.rb`,
+`config/initializers/slack_notifier.rb`). A slow Google or Slack endpoint
+therefore holds the request and the row lock open. The fix belongs in the
+backend: move both to a background job (Sidekiq is already deployed), or at
+least set short timeouts.
+
+The suite no longer fails the journey on this: `Steps.setAppointmentStatus`
+reads the appointment back after a transport error, continues only if the
+status really changed, and prints `WARNING D25`. It never resends.
+
+### D26 — a part refund by amount is refused on a product bill (QA server only)
+
+`Block7InventoryTest#e2e157_partRefundIssuesCreditNote` sells two units of a
+product (bill 3807, 472 paid) and refunds one unit, 236, by amount. The server
+answered:
+
+```
+422 {"error":"Refund the products on this bill item by item. A refund by
+     amount gives back up to ₹0, what its services came to."}
+```
+
+Nothing was written (bill still `paid`, no credit note). Part refunds on
+mixed bills passed in the same run (`e2e114`, `e2e115`, `e2e163`, `e2e164`,
+`e2e170`): their amounts stay within the bill's service total, which this
+rule allows. A full refund of a product bill (`e2e158`) also passed.
+
+No branch of the backend repository, after `git fetch` on 9 Nov 2026,
+contains this message or any item-by-item refund API.
+`Billing::RefundProcessor` only checks status, `0 < amount <= paid - refunded`,
+and a reason, which this request satisfies. So the QA server runs refund code
+that is not in the repository. Before the test changes, the backend team must
+say whether the rule is intended and, if it is, publish the item-level refund
+request so `e2e157` can use it. Until then the test stays red on purpose, and
+`Steps.refundPart` now puts the refusal body in the failure message.

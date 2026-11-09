@@ -379,11 +379,33 @@ public final class Steps {
 
     /** status is one of: pending confirmed arrived started completed no_show cancelled */
     public static void setAppointmentStatus(int appointmentId, String status) {
-        Response response = given().spec(Api.journey())
-                .pathParam("id", appointmentId)
-                .body(Map.of("status", status))
-                .when().patch("/appointments/{id}/status")
-                .then().extract().response();
+        Response response;
+        try {
+            response = given().spec(Api.journey())
+                    .pathParam("id", appointmentId)
+                    .body(Map.of("status", status))
+                    .when().patch("/appointments/{id}/status")
+                    .then().extract().response();
+        } catch (Exception e) {
+            // Completing sends FCM and Slack synchronously, without a timeout
+            // (D25). On 9 Nov 2026 the connection reset after ~4 minutes, yet
+            // the appointment was Completed. Read the state back instead of
+            // resending: carry on only if the change really landed.
+            if (!(e instanceof java.io.IOException)) {
+                throw e;
+            }
+            String now = readAppointment(appointmentId).getString("data.status");
+            String normalised = String.valueOf(now).trim().toLowerCase().replace(' ', '_');
+            if (!normalised.equals(status)) {
+                throw new AssertionError("PATCH /appointments/" + appointmentId + "/status -> "
+                    + status + " failed in transport (" + e + ") and the appointment is "
+                    + now + ", so the change did not land", e);
+            }
+            System.out.println("WARNING D25: PATCH /appointments/" + appointmentId
+                + "/status -> " + status + " lost its response (" + e
+                + "), but the server applied it; continuing.");
+            return;
+        }
         if (response.statusCode() != 200) {
             throw new AssertionError(
                 "PATCH /appointments/" + appointmentId + "/status -> " + status
@@ -1000,11 +1022,16 @@ public final class Steps {
      *  not an unwind, so the sale stays counted and the status becomes
      *  partially_refunded. */
     public static void refundPart(int billId, BigDecimal amount, String reason) {
-        given().spec(Api.journey())
+        Response response = given().spec(Api.journey())
                 .pathParam("id", billId)
                 .body(Map.of("amount", amount, "reason", reason))
                 .when().patch("/api/v1/billing/bills/{id}/refund")
-                .then().statusCode(200);
+                .then().extract().response();
+        // The refusal reason is the evidence: a bare "expected 200 but was
+        // 422" hid D26 until it was dug out of the Allure attachments.
+        assertEquals(response.statusCode(), 200,
+            "part refund of " + amount + " on bill " + billId + " was refused: "
+          + redacted(response));
     }
 
     /** Send the settlement call again, unchanged. Returns the status code.
