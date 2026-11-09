@@ -35,7 +35,24 @@ public final class Env {
     public static final String OTHER_SALON = get("otherSalonId");
     public static final String OTHER_TOKEN = get("otherToken");
 
+    /**
+     * Leading digits of every phone the suite invents (customers, staff).
+     * A block agreed with the backend team, so test users can be found with
+     * {@code mobile LIKE '<prefix>%'} and never land on a real person's
+     * account. Optional, so an older config.properties keeps working.
+     */
+    public static final String TEST_PHONE_PREFIX = optional("testPhonePrefix", "600");
+
     private Env() { }
+
+    private static String optional(String key, String fallback) {
+        String override = System.getProperty(key);
+        if (override != null && !override.isBlank()) {
+            return override.trim();
+        }
+        String value = P.getProperty(key);
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
 
     private static String get(String key) {
         String override = System.getProperty(key);

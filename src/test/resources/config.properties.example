@@ -16,3 +16,8 @@ journeyToken   = PASTE_4550_TOKEN
 # It must keep its seeded data, or the tenant-leak test has nothing to detect.
 otherSalonId = 1725
 otherToken   = PASTE_1725_TOKEN
+
+# Optional. Leading digits of every phone the suite creates, so test users can
+# be found with mobile LIKE '600%'. 3-4 digits, starting 6-9, not 91. Agree
+# the block with the backend team first. Default: 600
+# testPhonePrefix = 600

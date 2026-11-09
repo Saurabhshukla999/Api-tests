@@ -43,23 +43,36 @@ public final class Steps {
      * 100-second window plus the call counter. Two runs that reached the same
      * test at the same point in that window produced the SAME phone, so the
      * enquiry converted onto yesterday's customer and every first-time-visitor
-     * assertion downstream silently measured the wrong thing. Random keeps the
-     * value 10 digits and starting with 9 while making a cross-run collision
-     * effectively impossible.
+     * assertion downstream silently measured the wrong thing.
+     *
+     * It was then fully random 9xxxxxxxxx, which looks exactly like a real
+     * mobile: a hit on a real number attached the test enquiry and bills to
+     * that person's account, and analytics could not tell test users apart.
+     *
+     * Now every phone starts with the reserved {@code testPhonePrefix}
+     * (default 600) and the rest counts up from the clock in seconds, never
+     * repeating inside a run. Runs are serialized and use far fewer than one
+     * phone per second, so separate runs get separate numbers until the
+     * counter wraps: about 115 days with a 3-digit prefix.
      */
     public static String newPhone() {
-        long tail = java.util.concurrent.ThreadLocalRandom.current()
-                .nextLong(1_000_000_000L);
-        String digits = String.format("%09d", tail);
-        // The live normaliser treats a leading "91" as the India trunk prefix
-        // even on a 10-digit number and stores only the last 8 digits
-        // (9100955749 -> 00955749). That is an API defect, recorded separately;
-        // the suite's job is not to trip over it on every tenth customer.
-        if (digits.charAt(0) == '1') {
-            digits = "2" + digits.substring(1);
+        String prefix = Env.TEST_PHONE_PREFIX;
+        // Enquiries only accept [6-9] then nine digits. A leading "91" is cut
+        // to 8 digits by the live normaliser (D22), so it is refused here.
+        if (!prefix.matches("[6-9]\\d{2,3}") || prefix.startsWith("91")) {
+            throw new IllegalStateException("testPhonePrefix '" + prefix
+                + "' must be 3-4 digits, start with 6-9 and not start with 91");
         }
-        return "9" + digits;
+        int free = 10 - prefix.length();
+        long space = (long) Math.pow(10, free);
+        long now = (System.currentTimeMillis() / 1000) % space;
+        long tail = LAST_PHONE_TAIL.updateAndGet(last -> Math.max(last + 1, now)) % space;
+        return prefix + String.format("%0" + free + "d", tail);
     }
+
+    /** The last tail handed out, so two calls in the same second still differ. */
+    private static final java.util.concurrent.atomic.AtomicLong LAST_PHONE_TAIL =
+            new java.util.concurrent.atomic.AtomicLong(-1);
 
     // -----------------------------------------------------------------------
     /**

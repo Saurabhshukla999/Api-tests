@@ -98,6 +98,7 @@ private channel. Do not paste tokens into agent prompts, commits or tickets.
 | `ownerToken` | Token for the owner QA tenant |
 | `otherSalonId` | `1725`; separate tenant with retained data for isolation checks |
 | `otherToken` | Token for the second tenant |
+| `testPhonePrefix` | Optional, default `600`. Every customer and staff phone the suite creates is this prefix plus a counter, so test users are `mobile LIKE '600%'`. 3-4 digits, starting 6-9, not `91` (D22). Agree the block with the backend team and check it holds no real users |
 
 Confirm that each ID/token pair belongs to the selected environment. These IDs
 are example roles, not permission to write to any server. `Api.owner()` is a
