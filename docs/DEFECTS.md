@@ -572,6 +572,24 @@ what the server's answer matches. So the QA deployment has the new response
 shape but not the new rule: it is built from code that is not in the
 repository. The test is right. Ask the backend team which commit is deployed.
 
+**All seven `e2e010` assertions checked against `new_master_aws` (`5702734`),
+the reference branch, on 9 Nov 2026.** No test change was needed:
+
+| assertion | expected | `new_master_aws` |
+|---|---|---|
+| `sales.total_revenue` | +2 bills, gross | `Billing::Revenue.total(..., basis: GROSS)` |
+| `sales.bills_count` | +2 | `Revenue.count` = settled bills minus fully refunded; nothing is refunded here |
+| `payments.total_collected` | +2 bills, gross | `BillPayment.collected_for` summed net of refunds |
+| `payments.payments_count` | +2 | `collected_for.not_fully_refunded.count` |
+| `customers.total_spend_in_range` | +2 bills, gross | sum of `window_stats` spend for customers who visited |
+| `customers.new_customers` | +1 | visited in range, `first_visit_date` not before range start |
+| `services.services_sold` | +2 | sum of service-line quantities, refunded bills counted as 0 |
+
+One edge to watch, not measured: `first_visit` is a raw `MIN(billed_at)`
+select, which Rails 6.1 does not convert to the salon's time zone. If that
+holds, a first bill raised between 00:00 and 05:30 IST would read as the
+previous day and that customer would count as returning.
+
 ### D22 — a valid 10-digit phone beginning `91` is truncated to 8 digits
 
 `Steps.newPhone()` generated `9100955749` for `e2e009`. The enquiry was created
