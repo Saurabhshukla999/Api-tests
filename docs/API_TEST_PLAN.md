@@ -61,6 +61,9 @@ missing check is invisible in code review and unreachable from the UI.
 
 ### Assumptions
 
+> **9 Nov 2026:** `testnearz.co.in` is production, not a QA environment, and
+> no staging server exists. Write runs use the local Docker backend; see SETUP.md.
+
 - A QA salon exists with representative data: at least one settled bill, one
   draft bill, several products, services, staff and appointments.
 - **A second QA salon owned by a different user is available.** Without it the
@@ -87,7 +90,7 @@ that a report's summary card agrees with the rows beneath it.
 **Layer 3 — Existing RSpec request specs (127 files, already in the repo).**
 Run in CI against a test database. They cover 166 of the 176 endpoints. This
 suite complements them: RSpec proves the code is right against fixtures, these
-tests prove the *deployed QA environment* is right against real data.
+tests prove the *deployed environment* is right against real data.
 
 ### Test categories
 

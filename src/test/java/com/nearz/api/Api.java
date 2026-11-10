@@ -25,12 +25,12 @@ public final class Api {
 
     private Api() { }
 
-    /** Writes go here: salon 4550, the empty journey salon. */
+    /** Writes go here: the journey salon (4550 on production, which the guard blocks). */
     public static RequestSpecification journey() {
         return spec(Env.JOURNEY_TOKEN);
     }
 
-    /** Reads against the real QA salon 4536. Never used to write. */
+    /** Reads against the real salon 4536 on production. Never used to write. */
     public static RequestSpecification owner() {
         return spec(Env.OWNER_TOKEN);
     }
@@ -45,6 +45,7 @@ public final class Api {
         return new RequestSpecBuilder()
                 .setBaseUri(Env.BASE_URL)
                 .setContentType(ContentType.JSON)
+                .addFilter(new ProductionGuard())
                 .addFilter(new AllureRestAssured())
                 .build();
     }
@@ -54,6 +55,8 @@ public final class Api {
                 .setBaseUri(Env.BASE_URL)
                 .setContentType(ContentType.JSON)
                 .addHeader("Authorization", "Bearer " + token)
+                // First, so a refused production write is never sent or logged.
+                .addFilter(new ProductionGuard())
                 // Puts the full request and response of every call into the
                 // Allure report, attached to the test that made it.
                 .addFilter(new AllureRestAssured())

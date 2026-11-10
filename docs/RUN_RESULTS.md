@@ -1,5 +1,8 @@
 # Run results — 26 Aug 2026
 
+> Historical record. `testnearz.co.in`, called "QA" in these notes, is
+> production (confirmed 9 Nov 2026).
+
 Target: `https://www.testnearz.co.in` · salon 4536 · owner token (expires 24 Nov 2026)
 
 ## Tally

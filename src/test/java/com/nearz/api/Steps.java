@@ -129,7 +129,7 @@ public final class Steps {
      * EnquiriesController allows 60 writes (create, update, destroy, convert)
      * per user per minute, in a fixed window keyed on the epoch minute, and
      * every journey spends two (create + convert). Against the local Docker
-     * backend the suite runs five times faster than against QA and crossed the
+     * backend the suite runs five times faster than against production and crossed the
      * limit: 36 of 202 journeys failed with 429 on 2 Nov 2026.
      *
      * The throttle is the first statement of both actions, so a 429 means

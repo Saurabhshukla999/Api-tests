@@ -1,5 +1,11 @@
 # Request to the backend team — a test environment the suite can own
 
+> **Update 9 Nov 2026:** `testnearz.co.in`, called "QA" below, is
+> **production**: the live app and the B2B website use it. The suite now
+> refuses to write there and runs write tests on the local Docker backend.
+> The real request is a staging server running `new_master_aws`, with the
+> salons below on it.
+
 Three things. The first is the only one that blocks anything.
 
 ## 1. A dedicated QA salon, with a way to reset it

@@ -292,7 +292,7 @@ public class VerifyDefectsTest extends BaseJourneyTest {
 
     @Test(description = "D11 - do the Sales card and the Sales table still disagree?")
     public void d11_cardVersusTable() {
-        // Read-only, against the REAL QA salon 4536 where the discrepancy was seen.
+        // Read-only, against the REAL production salon 4536 where the discrepancy was seen.
         Object cardCount = given().spec(Api.owner())
                 .pathParam("salonId", Env.OWNER_SALON)
                 .queryParam("range", "monthly").queryParam("_qa", System.nanoTime())

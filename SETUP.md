@@ -91,27 +91,45 @@ private channel. Do not paste tokens into agent prompts, commits or tickets.
 
 | Key | Example value / purpose |
 |---|---|
-| `baseUrl` | `https://www.testnearz.co.in`; replace for another authorized backend |
+| `baseUrl` | `https://www.testnearz.co.in` is **production** (the live app and B2B website use it; writes are blocked, see below). `http://localhost:3000` for the local Docker backend |
 | `journeySalonId` | `4550`; dedicated tenant for writes and seeding |
 | `journeyToken` | Bearer token for that tenant, without the `Bearer ` prefix |
-| `ownerSalonId` | `4536`; existing QA data, read only |
-| `ownerToken` | Token for the owner QA tenant |
+| `ownerSalonId` | `4536`; a real production salon, read only |
+| `ownerToken` | Token for the owner tenant (4536) |
 | `otherSalonId` | `1725`; separate tenant with retained data for isolation checks |
 | `otherToken` | Token for the second tenant |
 | `testPhonePrefix` | Optional, default `600`. Every customer and staff phone the suite creates is this prefix plus a counter, so test users are `mobile LIKE '600%'`. 3-4 digits, starting 6-9, not `91` (D22). Agree the block with the backend team and check it holds no real users |
 
 Confirm that each ID/token pair belongs to the selected environment. These IDs
 are example roles, not permission to write to any server. `Api.owner()` is a
-convention, not a technical write blocker. The suite has no production URL guard.
+convention, not a technical write blocker.
 
-`Env` loads the classpath file first, then uses nonblank Java `-D` properties in
-preference to file values. **The file must exist even when using overrides**,
-and all seven settings are initialized together. Shell environment variables
-and `.env` files are not read. Nonsecret override example:
+**Production write guard.** `testnearz.co.in` serves real customers, so
+`ProductionGuard` refuses every POST, PUT, PATCH and DELETE to it before the
+request is sent, and the test fails with a message saying so. GETs still pass,
+so read-only checks can run there. Almost every journey writes (class setup
+saves working days), so in practice the suite does not run on production. To
+write there deliberately, add `-DallowProductionWrites=true` on the command
+line; it is never read from a config file.
+
+`Env` loads `config.properties` from the classpath, or the file named by
+`-DconfigFile`, then uses nonblank Java `-D` properties in preference to file
+values. **The file must exist even when using overrides**, and all seven
+settings are initialized together. Shell environment variables and `.env`
+files are not read. Examples:
 
 ```sh
-mvn test "-DbaseUrl=https://staging.example.com" "-Dtest=ProductCrudTest"
+# Local Docker backend, using src/test/resources/config.local.properties
+mvn test "-DconfigFile=config.local.properties" "-Dtest=ProductCrudTest"
+
+# One nonsecret override
+mvn test "-DbaseUrl=http://localhost:3000" "-Dtest=ProductCrudTest"
 ```
+
+`config.local.properties` is git-ignored like `config.properties`. It holds
+`baseUrl = http://localhost:3000`, the local salon id for all three
+`*SalonId` keys and a local token for the three `*Token` keys (see "Preparing
+the local Docker backend" below).
 
 Keep credentials in the ignored file rather than command arguments, where they
 can appear in shell history or process listings. Verify exclusion with:
@@ -181,27 +199,31 @@ yourself and share the authenticated tab with the agent.
 ## 4. Run live tests deliberately
 
 Every command below contacts the configured API and can mutate test data,
-including class setup. Reserve the journey salon for one run at a time across
-all developers, agents and CI jobs. Separate Git worktrees do not isolate API data.
+including class setup. Run them against the **local Docker backend**, which runs
+the backend checkout (equivalent to `new_master_aws`, the source of truth, for
+every endpoint the suite calls) and touches no real data. Against production
+the write guard stops them at the first write. Reserve the journey salon for one
+run at a time across all developers, agents and CI jobs. Separate Git worktrees
+do not isolate API data.
 
 ```sh
 # Small CRUD check; creates and deletes products
-mvn test "-Dtest=ProductCrudTest" "-DexcludedGroups=known-defect"
+mvn test "-DconfigFile=config.local.properties" "-Dtest=ProductCrudTest" "-DexcludedGroups=known-defect"
 
 # One complete business journey
-mvn test "-Dtest=Block1EnquiryTest#e2e001_enquiryToSettledBill" "-DexcludedGroups=known-defect"
+mvn test "-DconfigFile=config.local.properties" "-Dtest=Block1EnquiryTest#e2e001_enquiryToSettledBill" "-DexcludedGroups=known-defect"
 
 # One block; -Dtest bypasses the XML suite, so retain the group exclusion
-mvn test "-Dtest=Block4AppointmentTest" "-DexcludedGroups=known-defect"
+mvn test "-DconfigFile=config.local.properties" "-Dtest=Block4AppointmentTest" "-DexcludedGroups=known-defect"
 
 # Normal suite, ordered by testng.xml, with known-defect excluded there
-mvn test
+mvn test "-DconfigFile=config.local.properties"
 
 # Explicit defect reproduction: bypass XML's known-defect exclusion
-mvn test "-Dtest=Block*Test" "-Dgroups=known-defect"
+mvn test "-DconfigFile=config.local.properties" "-Dtest=Block*Test" "-Dgroups=known-defect"
 
 # Diagnostic audit; inspect printed verdicts, not just Maven's exit code
-mvn test "-Dtest=VerifyDefectsTest"
+mvn test "-DconfigFile=config.local.properties" "-Dtest=VerifyDefectsTest"
 ```
 
 Quote `-D` arguments as shown for PowerShell and to protect `#` and `*` from
@@ -253,7 +275,7 @@ docker compose run --rm api-tests
 # Run tests against local backend running on Docker/localhost (port 3000)
 docker compose run --rm api-tests mvn test "-DbaseUrl=http://host.docker.internal:3000"
 
-# Run tests against staging
+# Run tests against a staging server, if one exists (none did on 9 Nov 2026)
 docker compose run --rm api-tests mvn test "-DbaseUrl=https://apistaging.nearz.in"
 
 # Run a specific journey or block
@@ -264,11 +286,20 @@ Allure results are written to `./allure-results` on the host machine.
 
 ### Preparing the local Docker backend (measured 2 Nov 2026)
 
-Until a staging environment exists, the suite runs against the backend's own
-development stack (`Nearz_B2B/backend/docker/development`, `new_master_aws`).
-Pass `baseUrl=http://localhost:3000`, the local salon id for all three
-`*SalonId` keys and a local token for the three `*Token` keys as `-D` overrides.
-A fresh stack needs this first:
+There is no staging environment, and `testnearz.co.in` is production, so
+write runs use the backend's own development stack
+(`Nearz_B2B/backend/docker/development`). Its `web` container mounts the
+backend folder, so it runs whatever is checked out there. On 9 Nov 2026 that
+was `new_master_aws` plus a signup fix and local-dev changes; none of them touch
+an endpoint the suite calls. Put the local values in
+`src/test/resources/config.local.properties` and pass
+`-DconfigFile=config.local.properties`. On 9 Nov 2026 the local stack had one
+salon (id 1, owner user 1), so all three salon roles point at it and the
+Block 11 cross-tenant check cannot mean anything until a second local salon
+exists. Mint a token with
+`docker exec development-web-1 bash -lc 'cd /nearz && bundle exec rails runner "print JsonWebToken.encode(user_id: 1)"'`
+(valid 90 days) and write it straight into the file. A fresh stack needs this
+first:
 
 1. **Notifications off.** The dev stack has no Firebase key, so every booking
    answered 500, and it inherits the real Slack webhooks. Set
@@ -290,7 +321,7 @@ started yet. With the 40-stylist roster that is 760 places a day, so start a
 full run early in the day and run it at most once per day. A run started late
 fails with "today's calendar is full".
 
-The local stack answers far faster than QA, which is why `Steps` waits out the
+The local stack answers far faster than production, which is why `Steps` waits out the
 enquiry write throttle (60 per user per minute). Known differences from the QA
 server are recorded in [DEFECTS.md](docs/DEFECTS.md) (D20, D21, D24, SW-8).
 

@@ -8,7 +8,7 @@ import java.math.RoundingMode;
  *
  * This is the whole point of the exercise. Asserting that the API's total
  * equals the API's total proves nothing; asserting that it equals a number we
- * computed independently is a test. Confirmed against the live QA API:
+ * computed independently is a test. Confirmed against the live production API:
  *
  *     lineTotal = unitPrice x qty x (1 - lineDiscountPct/100)
  *     subtotal  = sum(lineTotal)

@@ -186,11 +186,11 @@ of the 200 — it pins **D16** on its own.
 | Salon | Role | Rule |
 |---|---|---|
 | **4550** | journeys write here | empty to start with, so every delta is unambiguous |
-| **4536** | the real QA salon | tests only READ here |
+| **4536** | a real salon on production | tests only READ here |
 | **1725** | the second tenant | must keep its data, or the tenant-leak check has nothing to detect |
 
 This separation is not decoration. Running journeys on 4536 put a permanently
-invalid working-day record on the live QA salon. Swapping 1725 for an empty
+invalid working-day record on the real production salon 4536. Swapping 1725 for an empty
 salon silently stopped the tenant-leak test from detecting anything, because
 there was no data left to leak.
 
@@ -275,15 +275,19 @@ adding a test.
 
 ## Setup
 
+`testnearz.co.in` is **production**: the live app and the B2B website use it.
+The suite refuses to write there (`ProductionGuard`), so write runs go to the
+local Docker backend:
+
 1. Copy `src/test/resources/config.properties.example` to
-   `src/test/resources/config.properties` (do not overwrite existing credentials)
-2. Paste the three salon tokens
-3. `mvn test`
+   `src/test/resources/config.local.properties` (do not overwrite existing credentials)
+2. Fill in the local base URL, salon id and token (SETUP.md, "Preparing the local Docker backend")
+3. `mvn test "-DconfigFile=config.local.properties"`
 
 Any value can be overridden without editing the file:
 
 ```bash
-mvn test "-DbaseUrl=https://staging.example.com"
+mvn test "-DconfigFile=config.local.properties" "-DbaseUrl=http://localhost:3000"
 ```
 
 ---

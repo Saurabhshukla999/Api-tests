@@ -24,7 +24,7 @@ import static org.testng.Assert.assertTrue;
  * or split 50/50 between two, does each stylist get paid on their own share at
  * their own rate - once - and does a product line stay theirs alone?
  *
- * Everything below was measured against the live QA API on 26 Oct 2026, and
+ * Everything below was measured against the live production API on 26 Oct 2026, and
  * every expected figure is computed here from the catalogue price, the share
  * and the rate; nothing is read back from the response it is checking.
  *

@@ -363,7 +363,7 @@ public class Block4AppointmentTest extends BaseJourneyTest {
             "PUT /appointments/{id}/reschedule answers 422 \"Feature not enabled "
           + "for this salon\" on salon " + SALON + ". Measured 30 Aug 2026 with "
           + "both a wrapped and a flat payload, so it is the feature flag and "
-          + "not the request shape. Ask for the reschedule flag on the QA salon "
+          + "not the request shape. Ask for the reschedule flag on the test salon "
           + "- see docs/TEST_ENVIRONMENT_REQUEST.md - and delete this skip.");
     }
 

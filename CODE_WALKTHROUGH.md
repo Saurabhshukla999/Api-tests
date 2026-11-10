@@ -208,7 +208,7 @@ same salon each see the other's money in their after-snapshot. Measured: 18
 tests failed on 8 threads, all 18 passed serially.
 
 **"Which salon does this write to?"**
-4550, which was empty. 4536 — the real QA salon — is read-only for these tests.
+4550, which was empty. 4536 — a real salon on production — is read-only for these tests.
 1725 is the second tenant, kept for the isolation checks.
 
 **"What if it fails?"**

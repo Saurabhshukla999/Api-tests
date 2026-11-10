@@ -5,6 +5,7 @@ allure-results/
 .idea/
 # Never commit real tokens
 src/test/resources/config.properties
+src/test/resources/config.local.properties
 /bin/
 _to_delete/
 *.log

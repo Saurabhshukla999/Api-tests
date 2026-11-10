@@ -15,7 +15,12 @@ Source, `pom.xml` and `testng.xml` take precedence over historical run summaries
 - A live run needs an authorized target and valid tenant credentials. Honor
   authorization already provided; if absent, finish local work and report that
   live validation remains unrun. Do not infer live-run permission from a docs task.
-- Writes and seeding use the dedicated journey tenant. Owner QA is read-only;
+- `testnearz.co.in` is PRODUCTION (the live app and B2B website use it), not QA.
+  `ProductionGuard` refuses writes there unless `-DallowProductionWrites=true`;
+  never pass that flag without the user's explicit approval for that run. Run
+  write tests on the local Docker backend (`-DconfigFile=config.local.properties`).
+  Expected behaviour comes from backend `origin/new_master_aws`, not production.
+- Writes and seeding use the dedicated journey tenant. The owner salon (4536, a real production salon) is read-only;
   the other tenant's data must remain available for isolation tests.
 - Serialize all live runs sharing a journey tenant, including other processes.
   Never enable test parallelism to reduce runtime. Worktrees isolate files only.

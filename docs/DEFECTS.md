@@ -13,7 +13,7 @@ Full evidence, reproduction steps and raw numbers are in **`RUN_RESULTS.md`**.
 
 ## Re-verified 4 September 2026
 
-Every defect that can be re-tested mechanically was re-run against the live QA
+Every defect that can be re-tested mechanically was re-run against the live production
 API. Repeat it any time with:
 
 ```
@@ -49,9 +49,9 @@ still-open defect cannot hide the other twelve.
 | **D21** first-time visitors misclassified | **OPEN** | `new_customers` 12 / `returning_customers` 3 = exactly the three customers with **two** visits today, although none had visited before the window |
 | **D22** phone starting `91` truncated | **OPEN** | a valid 10-digit phone `9100955749` is stored and returned as **00955749** (8 digits) |
 | **D23** enquiry conversion 422 after the write | **OPEN (one occurrence)** | enquiry `3536` answered **422** on convert, yet customer `4229` was created with the same name and phone; a retry answered **409 "enquiry is already converted"**. Not reproduced on the two later runs |
-| **D24** fully refunded payment stays in `payments_count` | **OPEN (QA server only)** | refund one bill, settle a second for the same customer: `payments_count` moved **+2** on testnearz.co.in (15 → 17, 172 → 174). Excluding a payment refunded in full is the confirmed rule (2 Nov 2026), and swagger and `new_master_aws` (`5702734`) both implement it |
+| **D24** fully refunded payment stays in `payments_count` | **OPEN (production only)** | refund one bill, settle a second for the same customer: `payments_count` moved **+2** on testnearz.co.in (15 → 17, 172 → 174). Excluding a payment refunded in full is the confirmed rule (2 Nov 2026), and swagger and `new_master_aws` (`5702734`) both implement it |
 | **D25** completing an appointment can hang for minutes | **OPEN (backend)** | `PATCH /appointments/13983/status` reset after ~4.5 min on 9 Nov 2026, yet the appointment was `Completed`. Completion sends FCM and Slack synchronously with no timeout |
-| **D26** part refund by amount refused on product bills | **OPEN (QA server only, unconfirmed rule)** | 422 "Refund the products on this bill item by item. A refund by amount gives back up to ₹0, what its services came to." No branch of the backend repo contains this rule |
+| **D26** part refund by amount refused on product bills | **OPEN (production only, unconfirmed rule)** | 422 "Refund the products on this bill item by item. A refund by amount gives back up to ₹0, what its services came to." No branch of the backend repo contains this rule |
 | **Finding F** expense write route | **BY DESIGN, worth knowing** | `POST /salons/{id}/expenses` → **404**; the route is `POST /expenses`, salon taken from the token |
 | **Finding G** auto-written Credit rows | **CORRECT, and load-bearing** | every completed appointment writes a Credit expense row; salon 4550 carries **160,000** of them and Operating Expenses correctly excludes all of it |
 | **C1-C4** commission and shared service | **OPEN / AMBIGUOUS** | empty `staff: []` settles unattributed; `staff` is an object for one person and an array for two; reversal counters stay 0 after refunds; a just-created staff member is briefly refused by billing. Details under "Commission and shared service" below |
@@ -124,7 +124,7 @@ round-off. `expectSettled` now models both, and Block 1 still passes unchanged.
 
 Worth noting for anyone reading the Rails source: `ProfitQuery` in the repo
 computes `gross_revenue = bills.sum(:net_payable)` — tax included — which is
-**not** what the deployed API returns. The repo checkout and the QA deployment
+**not** what the deployed API returns. The repo checkout and the production deployment
 are not the same version. Trust the measurement.
 
 **D18 — a bill raised through the billing module is never linked to its
@@ -395,7 +395,7 @@ request body is rejected by the endpoint that documents it.
 - Prices come back as strings (`"90.0"`), not numbers.
 - ~~Reports are cached for 60 seconds… It appears inactive on QA — writes show
   up in the very next read.~~ **Wrong, and corrected 30 Aug: the cache is very
-  much active on QA.** This line was written before the cache was measured
+  much active on production.** This line was written before the cache was measured
   properly, and it is left here struck through because it is the reason the
   60-second staleness went unnoticed for so long. See **D17**.
 - `POST /appointments` accepts no `customer_id`. The only customer handle is
@@ -474,7 +474,7 @@ reconfirmed by the product owner on 2 Nov 2026: a refund reverses money, not
 the fact that a bill was raised, so `bills_count` must **not** drop when a bill
 is refunded. Since commit `3790c1e` every refund journey expects the refunded
 bill to stay counted (`expectFullyReversed`, `e2e020`, `e2e120`, `e2e125`,
-`e2e192`, `e2e193`, `e2e194`, `e2e200`). The live QA server already behaves this
+`e2e192`, `e2e193`, `e2e194`, `e2e200`). The production server already behaves this
 way, and the swagger text below is drift (SW-13).
 
 **The production branch does not implement the rule yet.** On `new_master_aws`
@@ -564,11 +564,11 @@ straight contradiction of the documented definition and remains red.
 for the new customer 4770 shows `first_visit_date 2026-11-09`,
 `total_visits 2`, `customer_type repeat`, and the summary still did not
 count them as first-time. Every branch of the backend repository that returns
-`total_spend_in_range` (the QA server does) computes
+`total_spend_in_range` (production does) computes
 `returning = first_visit_date < range.start_date`, which counts this customer
 as first-time (`app/queries/reports/customers_query.rb`, since `050f33e`,
 16 Aug). The old rule, `customer_type == 'repeat'` (lifetime visits > 1), is
-what the server's answer matches. So the QA deployment has the new response
+what the server's answer matches. So the production deployment has the new response
 shape but not the new rule: it is built from code that is not in the
 repository. The test is right. Ask the backend team which commit is deployed.
 
@@ -589,6 +589,10 @@ One edge to watch, not measured: `first_visit` is a raw `MIN(billed_at)`
 select, which Rails 6.1 does not convert to the salon's time zone. If that
 holds, a first bill raised between 00:00 and 05:30 IST would read as the
 previous day and that customer would count as returning.
+
+**Passed on the local Docker backend on 9 Nov 2026** (backend checkout,
+equivalent to `new_master_aws` for these endpoints): `e2e010` green. D21 is a
+production-only defect.
 
 ### D22 — a valid 10-digit phone beginning `91` is truncated to 8 digits
 
@@ -658,7 +662,7 @@ journeys stopped at the `bills_count` check above them (D20); commit `3790c1e`
 aligned `bills_count` with the swagger change, and `payments_count` became the
 next assertion to run.
 
-**The rule is confirmed; the QA server is behind it.** On 2 Nov 2026 the
+**The rule is confirmed; production is behind it.** On 2 Nov 2026 the
 product owner confirmed that a payment refunded in full must drop out of
 `payments_count`. The production branch implements this: `new_master_aws` was
 pulled from Bitbucket the same day (tip `5702734`, already up to date) and
@@ -815,7 +819,7 @@ The suite no longer fails the journey on this: `Steps.setAppointmentStatus`
 reads the appointment back after a transport error, continues only if the
 status really changed, and prints `WARNING D25`. It never resends.
 
-### D26 — a part refund by amount is refused on a product bill (QA server only)
+### D26 — a part refund by amount is refused on a product bill (production only)
 
 `Block7InventoryTest#e2e157_partRefundIssuesCreditNote` sells two units of a
 product (bill 3807, 472 paid) and refunds one unit, 236, by amount. The server
@@ -834,8 +838,11 @@ rule allows. A full refund of a product bill (`e2e158`) also passed.
 No branch of the backend repository, after `git fetch` on 9 Nov 2026,
 contains this message or any item-by-item refund API.
 `Billing::RefundProcessor` only checks status, `0 < amount <= paid - refunded`,
-and a reason, which this request satisfies. So the QA server runs refund code
-that is not in the repository. Before the test changes, the backend team must
-say whether the rule is intended and, if it is, publish the item-level refund
-request so `e2e157` can use it. Until then the test stays red on purpose, and
-`Steps.refundPart` now puts the refusal body in the failure message.
+and a reason, which this request satisfies. So production runs refund code
+that is not in the repository. `new_master_aws` is the source of truth and
+allows this refund, so the test stays as it is and fails on production until
+production runs repository code. `Steps.refundPart` now puts the refusal body
+in the failure message.
+
+**Passed on the local Docker backend on 9 Nov 2026:** `e2e157` green, with a
+credit note issued with its CGST/SGST split. D26 is a production-only rule.

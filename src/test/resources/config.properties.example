@@ -1,10 +1,14 @@
 # Where the tests point and who they log in as.
 # Any value here can be overridden on the command line:
-#     mvn test -DbaseUrl=https://staging.example.com
+#     mvn test -DbaseUrl=http://localhost:3000
+# For the local Docker backend, copy this file to config.local.properties,
+# fill in local values and run with -DconfigFile=config.local.properties.
 
+# testnearz.co.in is PRODUCTION: the live app and the B2B website use it.
+# The suite refuses to write there unless -DallowProductionWrites=true.
 baseUrl = https://www.testnearz.co.in
 
-# Salon 4536 - the real QA salon, with real data. Journeys only READ here.
+# Salon 4536 - a real salon on production, with real data. Journeys only READ here.
 ownerSalonId = 4536
 ownerToken   = PASTE_4536_TOKEN
 
