@@ -224,15 +224,15 @@ public abstract class BaseJourneyTest {
      * A sale that was silently deleted also nets to zero - that is a different,
      * worse bug, and this is what tells the two apart.
      *
-     * The bill itself stays in sales.bills_count. A refund reverses the money,
-     * not the fact that a bill was raised. That is the product decision of
-     * 22 Oct 2026; the swagger text saying a fully refunded bill is excluded
-     * is recorded as drift in docs/DEFECTS.md (SW-13).
+     * A fully refunded bill also drops out of sales.bills_count, as in
+     * new_master_aws (Billing::Revenue.counted_scope excludes status refunded)
+     * and its swagger. On 10 Nov 2026 the owner chose the repository rule over
+     * the 2 Nov product decision that kept it counted (D20, docs/DEFECTS.md).
      */
     protected void expectFullyReversed(Map<String, BigDecimal> before,
                                        Map<String, BigDecimal> after,
                                        BigDecimal collected) {
-        expectMoved(before, after, "sales.bills_count", ONE);
+        expectMoved(before, after, "sales.bills_count", ZERO);
         expectMoved(before, after, "sales.total_revenue", ZERO);
         expectMoved(before, after, "sales.service_revenue", ZERO);
         expectMoved(before, after, "payments.total_collected", ZERO);

@@ -257,10 +257,10 @@ public class Block3RefundTest extends BaseJourneyTest {
         assertSameDay(day);
         assertBillIsPaidBy(kept, customer);
 
-        // Two bills were raised, so the bill count keeps both. Only the kept
-        // bill contributes revenue and payments.
+        // Two bills were raised and one was fully refunded, so only the kept
+        // bill counts, and only it contributes revenue and payments (D20).
         BigDecimal survives = gross(1, 0, ZERO);
-        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("1"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
         expectMoved(before, after, "customers.total_spend_in_range", survives);
@@ -371,9 +371,9 @@ public class Block3RefundTest extends BaseJourneyTest {
         var after = snapshot();
         assertSameDay(day);
 
-        // Two bills were raised; the refunded one stays in the count.
+        // Two bills were raised; the fully refunded one drops out of the count (D20).
         BigDecimal survives = gross(1, 0, ZERO);
-        expectMoved(before, after, "sales.bills_count", new BigDecimal("2"));
+        expectMoved(before, after, "sales.bills_count", new BigDecimal("1"));
         expectMoved(before, after, "sales.total_revenue", survives);
         expectMoved(before, after, "payments.total_collected", survives);
         expectMoved(before, after, "payments.payments_count", ONE);
