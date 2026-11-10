@@ -38,7 +38,9 @@ jobs:
       - name: Start, reset and seed the local backend
         working-directory: nearz-api-tests
         env:
-          BACKEND_DIR: ${{ github.workspace }}/backend
+          STACK: pinned
+          SKIP_PIN: '1'
+          BACKEND_SRC: ${{ github.workspace }}/backend
         run: |
           bash scripts/local-backend.sh up
           bash scripts/local-backend.sh reset --yes

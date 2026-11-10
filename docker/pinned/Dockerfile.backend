@@ -1,0 +1,24 @@
+# Image for the pinned test stack: runs a clean checkout of new_master_aws.
+#
+# new_master_aws's own Dockerfile still targets Ruby 2.5 and cannot build the
+# app (Rails 6.1 on Ruby 3.1.1), so the test repo carries a working one. The
+# build context is the pinned backend checkout; nothing here is copied into it.
+FROM ruby:3.1.1-slim-bullseye
+
+# bullseye is EOL: security.debian.org 404s, so use archive.debian.org.
+RUN sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; \
+  apt-get -o Acquire::Check-Valid-Until=false update -qq && apt-get install -y \
+  build-essential \
+  libpq-dev \
+  nodejs \
+  git \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /nearz
+
+COPY Gemfile /nearz/Gemfile
+COPY Gemfile.lock /nearz/Gemfile.lock
+RUN gem install bundler -v 2.3.7 && bundle install --jobs 4 --retry 3
+
+EXPOSE 3000
+CMD ["bash", "-c", "rm -f tmp/pids/server.pid && bundle exec rails s -p 3000 -b 0.0.0.0"]

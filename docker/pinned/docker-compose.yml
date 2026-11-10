@@ -1,0 +1,58 @@
+# The pinned test stack: a clean checkout of origin/new_master_aws (the source
+# of truth), never the backend working folder. Started by
+# scripts/local-backend.sh; see SETUP.md.
+#
+# Separate project, database and port from the backend's own dev stack
+# (port 3000), so working on the backend never changes what the tests hit.
+#
+# BACKEND_SRC   the pinned checkout (default ../backend-pinned)
+# .generated/   config files derived from that checkout by the script
+name: nearz-tests
+
+x-backend: &backend
+  image: nearz-tests-backend
+  environment:
+    RAILS_ENV: development
+    DATABASE_HOST: db
+    REDIS_URL: redis://redis:6379/0
+    NEARZ_TEST_STACK: 'true'
+    LAUNCHY_DRY_RUN: 'true'
+  volumes:
+    - ${BACKEND_SRC:?set BACKEND_SRC}:/nearz
+    - ./.generated/database.yml:/nearz/config/database.yml:ro
+    - ./.generated/sidekiq.rb:/nearz/config/initializers/sidekiq.rb:ro
+    - ./.generated/development.rb:/nearz/config/environments/development.rb:ro
+    - ./overlay/zz_nearz_test_stack.rb:/nearz/config/initializers/zz_nearz_test_stack.rb:ro
+  depends_on:
+    - db
+    - redis
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    environment:
+      POSTGRES_USER: nearz
+      POSTGRES_DB: nearz
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+
+  web:
+    <<: *backend
+    build:
+      context: ${BACKEND_SRC:?set BACKEND_SRC}
+      dockerfile: ${PINNED_DIR:?set PINNED_DIR}/Dockerfile.backend
+    ports:
+      - "3100:3000"
+
+  sidekiq:
+    <<: *backend
+    command: bundle exec sidekiq
+
+volumes:
+  pgdata:

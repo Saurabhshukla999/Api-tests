@@ -307,36 +307,60 @@ docker compose run --rm api-tests mvn test "-Dtest=Block1EnquiryTest#e2e001_enqu
 
 Allure results are written to `./allure-results` on the host machine.
 
-### Preparing the local Docker backend (measured 2 Nov 2026)
+### The pinned local stack (10 Nov 2026)
 
 There is no staging environment, and `testnearz.co.in` is production, so
-write runs use the backend's own development stack
-(`Nearz_B2B/backend/docker/development`). Its `web` container mounts the
-backend folder, so it runs whatever is checked out there. On 9 Nov 2026 that
-was `new_master_aws` plus a signup fix and local-dev changes; none of them touch
-an endpoint the suite calls.
+write runs use a local Docker stack that runs a **clean checkout of
+`origin/new_master_aws`**, the source of truth.
+
+The tests used to run against the backend's own development stack, which
+mounts the backend working folder and therefore runs whatever branch and
+uncommitted edits happen to be there. On 10 Nov 2026 that was another branch
+plus 20 changed files. The pinned stack removes that drift:
+
+| | Pinned stack (default) | Backend dev stack (`STACK=dev`) |
+|---|---|---|
+| Code | `../backend-pinned`, a detached git worktree of `origin/new_master_aws` that is never edited | the backend working folder, as it is |
+| Compose | `docker/pinned/docker-compose.yml`, project `nearz-tests` | `backend/docker/development` + `docker/local-backend.override.yml` |
+| API | `http://localhost:3100` | `http://localhost:3000` |
+| Database | its own volume, schema loaded from the pinned `db/schema.rb` | the dev database |
 
 **One command** (Git Bash on Windows, any shell elsewhere):
 
 ```sh
-scripts/local-backend.sh all          # start/rebuild, seed, status
-scripts/local-backend.sh seed         # only re-seed and rewrite config.local.properties
-scripts/local-backend.sh status       # containers, Sidekiq, token check
-scripts/local-backend.sh reset --yes  # DROPS the local database first
+scripts/local-backend.sh all          # pin + build + start + load + seed + status
+scripts/local-backend.sh pin          # fetch new_master_aws, update the pinned checkout
+scripts/local-backend.sh status       # pinned commit, containers, Sidekiq, token check
+scripts/local-backend.sh reset --yes  # DROPS the stack's database, then reloads and seeds
 ```
 
-`up` layers `docker/local-backend.override.yml` on the backend's compose file
-(push and Slack off, `LAUNCHY_DRY_RUN` so mail jobs stop failing on a missing
-browser), rebuilds the images, which fixed the Sidekiq container that crashed
-from 7 Nov on missing gems, and installs `tzdata-legacy` in `db` if needed.
-`seed` (`scripts/local_seed.rb`, idempotent) keeps salon 1 as the journey salon,
-adds GST, creates a second salon under a different owner with two staff (owner
-phones in the reserved `600` block), mints 90-day local tokens and writes
-`src/test/resources/config.local.properties` (git-ignored) without printing
-them. Then run with `-DconfigFile=config.local.properties`.
+`new_master_aws` does not run in Docker on its own: its Dockerfile targets
+Ruby 2.5, its database and Sidekiq settings point at `localhost`, and
+development storage points at an unconfigured Cloudinary. The test repo
+supplies those pieces without editing the checkout:
 
-The rest of this section records how the first local stack was prepared by
-hand; the script now covers steps 1, 3 and 4. A fresh stack needed this:
+- `docker/pinned/Dockerfile.backend`: a Ruby 3.1.1 image.
+- `docker/pinned/Dockerfile.db`: Postgres 15 with `tzdata-legacy` built in.
+- `docker/pinned/.generated/`: the pinned `database.yml`, `sidekiq.rb` and
+  `development.rb`, copied by `pin` with exact patches for the database host,
+  Redis URL, cache store and local file storage. A patch that stops matching
+  stops the script instead of drifting silently.
+- `docker/pinned/overlay/zz_nearz_test_stack.rb`: mounted as an initializer
+  in this stack only. It silences Slack, Firebase push and 2factor SMS so
+  nothing leaves the machine. In-app notification rows are still written.
+
+`pin` refuses to update a pinned checkout that has local changes. `status`
+says whether it is behind `origin/new_master_aws`. `seed`
+(`scripts/local_seed.rb`, idempotent) creates the journey salon and a second
+salon under a different owner, with GST and staff (owner phones in the
+reserved `600` block). It mints 90-day tokens valid for that stack only and
+writes `src/test/resources/config.local.properties` (git-ignored) with the
+stack's URL and web container name. Then run with
+`-DconfigFile=config.local.properties`.
+
+The notes below record how the backend dev stack was first prepared by hand
+(2 Nov 2026). For the dev stack, `STACK=dev scripts/local-backend.sh up`
+covers steps 1, 3 and 4. A fresh dev stack needed this:
 
 1. **Notifications off.** The dev stack has no Firebase key, so every booking
    answered 500, and it inherits the real Slack webhooks. Set

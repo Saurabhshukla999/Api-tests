@@ -19,14 +19,13 @@ import java.util.concurrent.TimeUnit;
  * whose login needs an OTP.
  *
  * Only ever used when the base URL is localhost. Everything goes through
- * `docker exec` on the web container (localWebContainer, default
- * development-web-1) and `rails runner`, which refuses to run outside the
+ * `docker exec` on the web container (localWebContainer in the config file,
+ * default nearz-tests-web-1) and `rails runner`, which refuses to run outside the
  * development environment here because the script checks Rails.env first.
  */
 final class LocalBackend {
 
-    private static final String CONTAINER =
-            System.getProperty("localWebContainer", "development-web-1");
+    private static final String CONTAINER = Env.LOCAL_WEB_CONTAINER;
 
     private LocalBackend() { }
 

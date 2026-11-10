@@ -1,0 +1,5 @@
+# Postgres for the pinned test stack. Rails uses the Asia/Calcutta time zone;
+# this image only ships Asia/Kolkata, and every report answered 500 without the
+# legacy name. Built in here so it survives the container being recreated.
+FROM postgres:15
+RUN apt-get update -qq && apt-get install -y -qq tzdata-legacy && rm -rf /var/lib/apt/lists/*

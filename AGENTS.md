@@ -20,6 +20,8 @@ Source, `pom.xml` and `testng.xml` take precedence over historical run summaries
   never pass that flag without the user's explicit approval for that run. Run
   write tests on the local Docker backend (`-DconfigFile=config.local.properties`).
   Expected behaviour comes from backend `origin/new_master_aws`, not production.
+  The default local stack (`scripts/local-backend.sh all`, port 3100) runs a clean,
+  pinned checkout of it (`../backend-pinned`); never edit that checkout.
 - Writes and seeding use the dedicated journey tenant. The owner salon (4536, a real production salon) is read-only;
   the other tenant's data must remain available for isolation tests.
 - Serialize all live runs sharing a journey tenant, including other processes.

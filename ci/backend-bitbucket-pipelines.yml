@@ -27,8 +27,8 @@ definitions:
         caches: [docker]
         max-time: 90
         script:
-          # The backend is this checkout; the suite is cloned beside it.
-          - export BACKEND_DIR="$BITBUCKET_CLONE_DIR"
+          # The pinned test stack runs THIS pull request's code (no worktree in CI).
+          - export STACK=pinned SKIP_PIN=1 BACKEND_SRC="$BITBUCKET_CLONE_DIR"
           - git clone --depth 1 "https://x-access-token:${API_TESTS_TOKEN}@${API_TESTS_REPO#https://}" ../nearz-api-tests
           - cd ../nearz-api-tests
           # Fresh database: build, create, load schema, seed two salons and tokens.

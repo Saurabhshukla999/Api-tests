@@ -56,6 +56,11 @@ public final class Env {
      */
     public static final String TEST_PHONE_PREFIX = optional("testPhonePrefix", "600");
 
+    /** The local stack's web container, for jobs and minted tokens (LocalBackend).
+     *  Written by scripts/local-backend.sh seed: nearz-tests-web-1 for the pinned
+     *  new_master_aws stack, development-web-1 for the backend dev stack. */
+    public static final String LOCAL_WEB_CONTAINER = optional("localWebContainer", "nearz-tests-web-1");
+
     /**
      * Command line only, never read from a file: writing to production has to
      * be a deliberate choice on every run.

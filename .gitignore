@@ -10,3 +10,5 @@ src/test/resources/config.local.properties
 _to_delete/
 *.log
 *.err
+# Config generated from the pinned new_master_aws checkout by scripts/local-backend.sh
+docker/pinned/.generated/
