@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Contract check, kept out of the business suite on purpose: spec drift is a
+  documentation finding, not a broken journey. Read-only.
+
+    mvn test -DconfigFile=config.local.properties -DsuiteXml=testng-contract.xml
+-->
+<suite name="Nearz API contract" parallel="none" thread-count="1">
+  <test name="Every documented GET against backend/swagger/v1">
+    <classes><class name="com.nearz.api.ContractTest"/></classes>
+  </test>
+</suite>

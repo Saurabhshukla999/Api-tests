@@ -1,0 +1,55 @@
+# TEMPLATE for the BACKEND repository (Bitbucket mrguru/api-service).
+# Copy to the backend repo root as bitbucket-pipelines.yml (or merge into an
+# existing one). It runs the API suite against the pull request's own code on
+# every pull request; nothing touches production.
+#
+# Not yet run anywhere: written 10 Nov 2026. Validate on a first pull request.
+#
+# Repository variables (Settings > Repository variables, secured):
+#   API_TESTS_REPO   https://github.com/Saurabhshukla999/Api-tests.git
+#   API_TESTS_TOKEN  a read-only GitHub token for that repository
+#
+# To block merging on failure: Settings > Branch restrictions > new_master_aws >
+# "Minimum number of successful builds for the last commit with no failed
+# builds" = 1.
+
+image: atlassian/default-image:4
+
+definitions:
+  services:
+    docker:
+      memory: 3072
+  steps:
+    - step: &api-suite
+        name: API journey suite against this pull request
+        size: 2x
+        services: [docker]
+        caches: [docker]
+        max-time: 90
+        script:
+          # The backend is this checkout; the suite is cloned beside it.
+          - export BACKEND_DIR="$BITBUCKET_CLONE_DIR"
+          - git clone --depth 1 "https://x-access-token:${API_TESTS_TOKEN}@${API_TESTS_REPO#https://}" ../nearz-api-tests
+          - cd ../nearz-api-tests
+          # Fresh database: build, create, load schema, seed two salons and tokens.
+          - bash scripts/local-backend.sh up
+          - bash scripts/local-backend.sh reset --yes
+          - bash scripts/local-backend.sh status
+          # Business suite (known-defect excluded by testng.xml), then the
+          # contract check. The suite needs JDK 17 + Maven and the docker CLI
+          # (LocalBackend runs jobs in the web container), so it runs here.
+          - apt-get update -qq && apt-get install -y -qq openjdk-17-jdk-headless maven >/dev/null
+          - mvn -B test -DconfigFile=config.local.properties
+          - mvn -B test -DconfigFile=config.local.properties -DsuiteXml=testng-contract.xml || echo "contract drift - see report"
+        after-script:
+          - cd ../nearz-api-tests && tar czf "$BITBUCKET_CLONE_DIR/api-test-reports.tgz" target/surefire-reports || true
+        artifacts:
+          - api-test-reports.tgz
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *api-suite
+  custom:
+    api-suite:
+      - step: *api-suite

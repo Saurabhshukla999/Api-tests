@@ -16,6 +16,8 @@
     <rest-assured.version>5.5.0</rest-assured.version>
     <testng.version>7.10.2</testng.version>
     <allure.version>2.29.0</allure.version>
+    <!-- The TestNG suite to run; -DsuiteXml=testng-contract.xml for the contract check. -->
+    <suiteXml>testng.xml</suiteXml>
   </properties>
 
   <dependencies>
@@ -68,6 +70,15 @@
       <version>${allure.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- Contract check: validates live responses against the backend's own
+         OpenAPI 3 files (backend/swagger/v1, new_master_aws). See
+         ContractTest. -->
+    <dependency>
+      <groupId>com.atlassian.oai</groupId>
+      <artifactId>swagger-request-validator-restassured</artifactId>
+      <version>2.40.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -84,7 +95,7 @@
         <version>3.2.5</version>
         <configuration>
           <suiteXmlFiles>
-            <suiteXmlFile>testng.xml</suiteXmlFile>
+            <suiteXmlFile>${suiteXml}</suiteXmlFile>
           </suiteXmlFiles>
           <!-- Journeys assert exact report deltas. Two running at once against
                the same salon would each see the other's money, so every delta

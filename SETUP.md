@@ -236,6 +236,29 @@ or transactional rollback. Restore any temporary salon settings in `finally`.
 The default roster is 20 stylists × 19 slots = 380 appointments per day;
 restarting Maven does not reclaim slots. Coordinate capacity before a full run.
 
+### Contract check and CI
+
+```sh
+# Every documented GET checked against backend/swagger/v1 (read-only)
+mvn test "-DconfigFile=config.local.properties" "-DsuiteXml=testng-contract.xml"
+```
+
+`-DswaggerDir` points at another copy of the spec files. The default is
+`../backend/swagger/v1`. Findings are SW-14 and SW-15 in docs/DEFECTS.md.
+
+CI templates, written 10 Nov 2026 and **not yet run**:
+
+- `ci/backend-bitbucket-pipelines.yml`: copy it into the backend repository
+  to run the suite on every backend pull request against that pull request's
+  code. A branch restriction on `new_master_aws` then blocks merging on a
+  failure. It needs the `API_TESTS_REPO` and `API_TESTS_TOKEN` variables.
+- `.github/workflows/local-stack.yml`: a manual run in this repository
+  against any backend branch. It needs the `BITBUCKET_USER` and
+  `BITBUCKET_APP_PASSWORD` secrets.
+
+Blocks 13 to 15 are local only. They run jobs and mint customer and staff
+tokens inside the web container, and skip on any other target.
+
 ## 5. Reports and troubleshooting
 
 ```sh

@@ -923,3 +923,34 @@ only) stays red until it is fixed.
 so the request answers **500**. Nothing is changed (`API-E2E-227` asserts
 that), but the answer should be 404. `Block14CustomerAppTest#d30_...`
 (known-defect).
+
+## Contract check, 10 November 2026 (local backend vs backend/swagger/v1)
+
+`ContractTest` (`-DsuiteXml=testng-contract.xml`) calls every documented GET
+it can fill in and validates the response against the backend's own OpenAPI
+files. Result: 103 documented GETs, **55 match**, 34 fail, and 14 are skipped
+because they need an id the check does not create.
+
+**SW-14: three spec files are not valid OpenAPI 3, so 21 endpoints cannot be
+checked at all.**
+
+| file | problem | endpoints |
+|---|---|---:|
+| `salon_setup.json` | Swagger 2 keys (`consumes`, `responses.<code>.schema`) inside an OpenAPI 3 file | 14 (services, products, staff) |
+| `attendance.json` | `date` parameter with `default: today`, which is not a date | 6 |
+| `dashboard.json` | `discriminator` used where the schema has no matching shape (`/dashboard/attendance`) | 1 |
+
+**SW-15: 13 responses differ from their spec.**
+
+- `/salons/{id}/appointments`: appointment rows carry fields the schema forbids (`amount`, `comment`, ...).
+- `/reports/appointments`, `customers`, `inventory` summaries: split rows carry `count`, which the schema does not allow.
+- `/reports/staff_performance/summary`: KPI tiles carry `label`.
+- `/reports/catalogue`: filter options are objects; the spec says strings.
+- `/dashboard/overview`, `employees`, `packages`, `expenses`: KPI and summary values fail their `allOf` schemas.
+- `/salon_customer_profiles/summary`: `avg_lifetime_value` fails its schema.
+- `/categories`: the response carries `token`, which every response does, but this spec forbids it.
+
+These are documentation findings unless the frontend depends on the
+documented shape. The backend team should fix the spec files, so the check
+can guard every endpoint, and then decide, field by field, whether the code
+or the spec is right.

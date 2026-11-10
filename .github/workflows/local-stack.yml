@@ -1,0 +1,58 @@
+name: API suite on a local backend stack
+
+# Manual run: builds the backend from a chosen Bitbucket branch in Docker,
+# seeds it, and runs the business suite and the contract check against it.
+# Never contacts production. Not yet run: needs the two secrets below.
+#
+#   BITBUCKET_USER          Bitbucket username with read access to mrguru/api-service
+#   BITBUCKET_APP_PASSWORD  a Bitbucket app password (repositories:read)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_branch:
+        description: Backend branch to test
+        default: new_master_aws
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: nearz-api-tests
+      - name: Check out the backend
+        run: |
+          git clone --depth 1 --branch "${{ inputs.backend_branch }}" \
+            "https://${{ secrets.BITBUCKET_USER }}:${{ secrets.BITBUCKET_APP_PASSWORD }}@bitbucket.org/mrguru/api-service.git" backend
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: nearz-api-tests/pom.xml
+      - name: Start, reset and seed the local backend
+        working-directory: nearz-api-tests
+        env:
+          BACKEND_DIR: ${{ github.workspace }}/backend
+        run: |
+          bash scripts/local-backend.sh up
+          bash scripts/local-backend.sh reset --yes
+          bash scripts/local-backend.sh status
+      - name: Business suite
+        working-directory: nearz-api-tests
+        run: mvn -B test -DconfigFile=config.local.properties
+      - name: Contract check
+        if: always()
+        continue-on-error: true
+        working-directory: nearz-api-tests
+        run: mvn -B test -DconfigFile=config.local.properties -DsuiteXml=testng-contract.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: nearz-api-tests/target/surefire-reports
