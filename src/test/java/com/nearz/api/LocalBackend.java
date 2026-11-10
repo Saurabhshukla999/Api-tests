@@ -87,8 +87,32 @@ final class LocalBackend {
 
     /** A request spec logged in as the customer an appointment belongs to. */
     static RequestSpecification asCustomerOf(int appointmentId) {
-        String token = rails("a = Appointment.find(" + appointmentId + ")\n"
-            + "puts \"RESULT=#{JsonWebToken.encode(user_id: a.user_id)}\"\n");
+        return specFor(rails("a = Appointment.find(" + appointmentId + ")\n"
+            + "puts \"RESULT=#{JsonWebToken.encode(user_id: a.user_id)}\"\n"));
+    }
+
+    /**
+     * A request spec logged in as a rostered staff member. Creating the staff
+     * through the API links a login account (StaffLoginAccess); an empty result
+     * means that link was never made.
+     */
+    static RequestSpecification asStaff(int staffId) {
+        String token = rails("s = Staff.find(" + staffId + ")\n"
+            + "puts \"RESULT=#{s.user_id ? JsonWebToken.encode(user_id: s.user_id) : 'none'}\"\n");
+        if ("none".equals(token)) {
+            throw new AssertionError("staff " + staffId + " has no login account (staffs.user_id is "
+                + "empty), so StaffLoginAccess never ran for them");
+        }
+        return specFor(token);
+    }
+
+    /** Number of saved Roles & Permissions rows for a salon; 0 means the default matrix applies. */
+    static int savedRoleGrants(String salonId) {
+        return Integer.parseInt(rails("puts \"RESULT=#{RolePermission.for_salon("
+            + Integer.parseInt(salonId) + ").count}\"\n"));
+    }
+
+    private static RequestSpecification specFor(String token) {
         return new RequestSpecBuilder()
                 .setBaseUri(Env.BASE_URL)
                 .setContentType(ContentType.JSON)

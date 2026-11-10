@@ -71,4 +71,14 @@
     <classes><class name="com.nearz.api.Block13BackgroundJobTest"/></classes>
   </test>
 
+  <!-- Local Docker only: mints customer tokens in the web container. -->
+  <test name="Block 14 - customer app (API-E2E-224..227)">
+    <classes><class name="com.nearz.api.Block14CustomerAppTest"/></classes>
+  </test>
+
+  <!-- Local Docker only: mints staff tokens in the web container. -->
+  <test name="Block 15 - staff roles (API-E2E-228..230)">
+    <classes><class name="com.nearz.api.Block15StaffRoleTest"/></classes>
+  </test>
+
 </suite>

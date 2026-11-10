@@ -887,3 +887,39 @@ No `config.active_job.queue_adapter` is set anywhere, so Rails 6.1 uses
 restart or deploy, although Sidekiq is installed. This was read from code,
 not measured on production. The backend branch `fix/async-notifications`
 (commit `62a5c2d`) sets the adapter to Sidekiq. It is not merged.
+
+### D28 — SECURITY (Blocker): `POST /sign_in` logs in with a mobile number alone
+
+In `new_master_aws`, `AuthenticationController#sign_in` skips token checks.
+It looks the user up by mobile and returns a 24-hour JWT. It never asks for
+an OTP. Reproduced on the local backend on 10 Nov 2026: posting only
+`{"mobile":"+916000000002"}` returned a token, and that token read salon 2's
+working days (200). Anyone who knows the phone number of a customer, salon
+owner or staff member can act as them. This was not tested on production,
+deliberately: that would mean logging in to real accounts. The production
+build is not in the repository, so whether production has it is unknown.
+`Block14CustomerAppTest#d28_signInNeedsAnOtp` (known-defect, local only)
+stays red until the action is removed or requires an OTP.
+
+### D29 — SECURITY (Blocker): `POST /verify` accepts code `3227` if Origin mentions netlify
+
+`request_from_salon_app?` is `request.headers[:origin].include?('netlify')`.
+When it holds, `verify` accepts the fixed code `3227` for **any** mobile.
+`Origin` is chosen by the client, so any script can send it. Reproduced
+locally: a made-up `Origin: https://anything.netlify.app` with code `3227`
+logged in the salon-2 owner (200, working token). A wrong code answered
+401. `sign_up` also skips sending an OTP for the same header. Five fixed
+`TEST_MOBILE_NO` numbers accept `2244`. The local backend checkout adds a
+third, uncommitted backdoor (`8569879142` / `3227`). It is not in
+`new_master_aws`, but it should not be committed.
+`Block14CustomerAppTest#d29_netlifyOriginIsNotAnOtp` (known-defect, local
+only) stays red until it is fixed.
+
+### D30 — marking someone else's notification read answers 500
+
+`NotificationsController#mark_read` runs
+`Notification.find_by(id:, user_id: @current_user.id)` and then calls
+`update` on the result. For another user's notification the result is nil,
+so the request answers **500**. Nothing is changed (`API-E2E-227` asserts
+that), but the answer should be 404. `Block14CustomerAppTest#d30_...`
+(known-defect).
