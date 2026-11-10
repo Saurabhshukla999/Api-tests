@@ -327,6 +327,54 @@ public final class Steps {
                 .extract().jsonPath();
     }
 
+    /** An appointment's status, lower-cased: the API answers "Completed". */
+    public static String appointmentStatus(int appointmentId) {
+        return String.valueOf(readAppointment(appointmentId).getString("data.status"))
+                .trim().toLowerCase().replace(' ', '_');
+    }
+
+    /**
+     * The in-app notifications of whoever `who` is logged in as, newest first.
+     *
+     * GET /users/{id}/notifications ignores the id and answers for the token's
+     * own user (UsersController#notifications uses @current_user), so "me" is
+     * as good as a real id. These rows are written even when push and Slack are
+     * switched off (DISABLE_EXTERNAL_NOTIFICATIONS), so they are the one
+     * notification record a test can read everywhere.
+     */
+    public static List<Map<String, Object>> notifications(
+            io.restassured.specification.RequestSpecification who, int perPage) {
+        return given().spec(who)
+                .queryParam("per_page", perPage)
+                .when().get("/users/me/notifications")
+                .then().statusCode(200)
+                .body("data.meta", org.hamcrest.Matchers.notNullValue())
+                .extract().jsonPath().getList("data.notifications");
+    }
+
+    /** The notification `who` received about one appointment with this title, or null. */
+    public static Map<String, Object> notificationAbout(
+            io.restassured.specification.RequestSpecification who,
+            int appointmentId, String title) {
+        for (Map<String, Object> n : notifications(who, 50)) {
+            if (String.valueOf(n.get("entity_id")).equals(String.valueOf(appointmentId))
+                    && title.equals(n.get("title"))) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    /** How many notifications `who` received about one appointment with this title. */
+    public static long countNotificationsAbout(
+            io.restassured.specification.RequestSpecification who,
+            int appointmentId, String title) {
+        return notifications(who, 50).stream()
+                .filter(n -> String.valueOf(n.get("entity_id")).equals(String.valueOf(appointmentId)))
+                .filter(n -> title.equals(n.get("title")))
+                .count();
+    }
+
     /**
      * Change an existing appointment. Returns the status code.
      *

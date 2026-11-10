@@ -291,15 +291,29 @@ write runs use the backend's own development stack
 (`Nearz_B2B/backend/docker/development`). Its `web` container mounts the
 backend folder, so it runs whatever is checked out there. On 9 Nov 2026 that
 was `new_master_aws` plus a signup fix and local-dev changes; none of them touch
-an endpoint the suite calls. Put the local values in
-`src/test/resources/config.local.properties` and pass
-`-DconfigFile=config.local.properties`. On 9 Nov 2026 the local stack had one
-salon (id 1, owner user 1), so all three salon roles point at it and the
-Block 11 cross-tenant check cannot mean anything until a second local salon
-exists. Mint a token with
-`docker exec development-web-1 bash -lc 'cd /nearz && bundle exec rails runner "print JsonWebToken.encode(user_id: 1)"'`
-(valid 90 days) and write it straight into the file. A fresh stack needs this
-first:
+an endpoint the suite calls.
+
+**One command** (Git Bash on Windows, any shell elsewhere):
+
+```sh
+scripts/local-backend.sh all          # start/rebuild, seed, status
+scripts/local-backend.sh seed         # only re-seed and rewrite config.local.properties
+scripts/local-backend.sh status       # containers, Sidekiq, token check
+scripts/local-backend.sh reset --yes  # DROPS the local database first
+```
+
+`up` layers `docker/local-backend.override.yml` on the backend's compose file
+(push and Slack off, `LAUNCHY_DRY_RUN` so mail jobs stop failing on a missing
+browser), rebuilds the images, which fixed the Sidekiq container that crashed
+from 7 Nov on missing gems, and installs `tzdata-legacy` in `db` if needed.
+`seed` (`scripts/local_seed.rb`, idempotent) keeps salon 1 as the journey salon,
+adds GST, creates a second salon under a different owner with two staff (owner
+phones in the reserved `600` block), mints 90-day local tokens and writes
+`src/test/resources/config.local.properties` (git-ignored) without printing
+them. Then run with `-DconfigFile=config.local.properties`.
+
+The rest of this section records how the first local stack was prepared by
+hand; the script now covers steps 1, 3 and 4. A fresh stack needed this:
 
 1. **Notifications off.** The dev stack has no Firebase key, so every booking
    answered 500, and it inherits the real Slack webhooks. Set

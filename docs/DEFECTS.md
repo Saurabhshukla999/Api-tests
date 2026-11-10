@@ -846,3 +846,44 @@ in the failure message.
 
 **Passed on the local Docker backend on 9 Nov 2026:** `e2e157` green, with a
 credit note issued with its CGST/SGST split. D26 is a production-only rule.
+
+## Found 10 November 2026 (local Docker backend)
+
+### D27 — the staff commission split exists only on production
+
+Block 11 (`API-E2E-201..216`) creates staff with a `commission` object
+(`service_pct`, `product_pct`) and bills services shared between staff. On the
+local backend, staff creation answers without `data.commission`. The staff
+JSON has only the older `commission_type` and `commission_value`. No branch
+of the backend repository, local or on Bitbucket after `git fetch` on
+10 Nov 2026, contains `service_pct` or the shared-service messages ("Only a
+service can be shared between staff", "can appear once"). That includes
+`new_master_aws` and `feature/staff-commission-split`.
+
+So production runs this feature from code that was never pushed, like D26.
+Block 11 now checks for the `commission` object in `@BeforeClass` and skips
+all 19 of its tests with reason D27 on a backend without it. On production,
+the write guard stops it first. Ask the backend team to push the branch that
+holds the commission split. Until it is in `new_master_aws`, the Block 11
+cross-salon check (`e2e204`) cannot run; `e2e219` covers cross-salon
+notifications in the meantime.
+
+### Local setup: Sidekiq down, mail jobs failing (fixed in the test repo)
+
+The local `sidekiq` container had exited on 7 Nov:
+`Could not find simplecov-0.22.0 ... (Bundler::GemNotFound)`. The backend
+Gemfile has uncommitted test gems that its image lacked. A queued
+`NotificationWorker` (salon registration mail) had sat in Redis since then.
+Rebuilding the image fixed it. The mail job then failed on
+`Launchy::CommandNotFoundError`: `letter_opener` tries to open each mail in a
+browser and the container has none. `docker/local-backend.override.yml` sets
+`LAUNCHY_DRY_RUN=true`, and `scripts/local-backend.sh up` applies both fixes.
+
+### Backend finding: ActiveJob jobs live only in memory (fix on a branch)
+
+No `config.active_job.queue_adapter` is set anywhere, so Rails 6.1 uses
+`:async`. `AppointmentAutoConfirmJob` (15 min) and `AppointmentReminderJob`
+(30 min before the slot) are held in the Puma process and lost on every
+restart or deploy, although Sidekiq is installed. This was read from code,
+not measured on production. The backend branch `fix/async-notifications`
+(commit `62a5c2d`) sets the adapter to Sidekiq. It is not merged.

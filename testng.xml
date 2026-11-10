@@ -62,4 +62,13 @@
     <classes><class name="com.nearz.api.Block3RefundTest"/></classes>
   </test>
 
+  <test name="Block 12 - booking notifications (API-E2E-217..219)">
+    <classes><class name="com.nearz.api.Block12NotificationTest"/></classes>
+  </test>
+
+  <!-- Local Docker only: runs jobs inside the web container; skips elsewhere. -->
+  <test name="Block 13 - background jobs (API-E2E-220..223)">
+    <classes><class name="com.nearz.api.Block13BackgroundJobTest"/></classes>
+  </test>
+
 </suite>

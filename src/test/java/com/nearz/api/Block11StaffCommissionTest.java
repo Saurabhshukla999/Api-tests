@@ -79,6 +79,21 @@ public class Block11StaffCommissionTest extends BaseJourneyTest {
 
     @BeforeClass(alwaysRun = true)
     public void hireCommissionPair() {
+        // The commission object (service_pct/product_pct, shared-service splits)
+        // is not in any branch of the backend repository on 10 Nov 2026,
+        // new_master_aws included; only production serves it (D27). Skip the
+        // block, visibly, on a backend that lacks it rather than fail setup.
+        Map<String, Object> anyStaff = io.restassured.RestAssured.given().spec(Api.journey())
+                .pathParam("salonId", SALON)
+                .queryParam("limit", 1)
+                .when().get("/salons/{salonId}/staff")
+                .then().statusCode(200)
+                .extract().jsonPath().getMap("data.items[0]");
+        if (anyStaff != null && !anyStaff.containsKey("commission")) {
+            throw new org.testng.SkipException("D27: this backend has no staff `commission` object "
+                + "(only commission_type/commission_value). The commission split is not in "
+                + "new_master_aws; Block 11 needs it merged before it can run here.");
+        }
         oneName = "QA COMM one " + System.nanoTime();
         twoName = "QA COMM two " + System.nanoTime();
         one = Steps.createStaffWithCommission(SALON, oneName, FIFTEEN, FIVE);

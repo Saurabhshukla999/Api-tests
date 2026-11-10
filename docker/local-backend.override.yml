@@ -1,0 +1,16 @@
+# Layered on Nearz_B2B/backend/docker/development/docker-compose.yml by
+# scripts/local-backend.sh, so the backend's own compose file stays untouched.
+#
+# DISABLE_EXTERNAL_NOTIFICATIONS: no real Firebase push and no posts to the
+#   team Slack from test bookings (see backend config/initializers/external_notifications.rb).
+# LAUNCHY_DRY_RUN: letter_opener tries to open each mail in a browser; the
+#   containers have none, so every mail-sending Sidekiq job failed and retried.
+services:
+  web:
+    environment:
+      DISABLE_EXTERNAL_NOTIFICATIONS: 'true'
+      LAUNCHY_DRY_RUN: 'true'
+  sidekiq:
+    environment:
+      DISABLE_EXTERNAL_NOTIFICATIONS: 'true'
+      LAUNCHY_DRY_RUN: 'true'
