@@ -885,8 +885,10 @@ No `config.active_job.queue_adapter` is set anywhere, so Rails 6.1 uses
 `:async`. `AppointmentAutoConfirmJob` (15 min) and `AppointmentReminderJob`
 (30 min before the slot) are held in the Puma process and lost on every
 restart or deploy, although Sidekiq is installed. This was read from code,
-not measured on production. The backend branch `fix/async-notifications`
-(commit `62a5c2d`) sets the adapter to Sidekiq. It is not merged.
+not measured on production. Suggested fix, for the backend team to
+evaluate: `config.active_job.queue_adapter = :sidekiq`, with ActiveJob's
+`default` queue listed in `config/sidekiq.yml`. A local proof of concept
+exists, but no backend change has been proposed or pushed.
 
 ### D28 — SECURITY (Blocker): `POST /sign_in` logs in with a mobile number alone
 
