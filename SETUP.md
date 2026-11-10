@@ -360,7 +360,7 @@ fails with "today's calendar is full".
 
 The local stack answers far faster than production, which is why `Steps` waits out the
 enquiry write throttle (60 per user per minute). Known differences from the QA
-server are recorded in [DEFECTS.md](docs/DEFECTS.md) (D20, D21, D24, SW-8).
+server are recorded in [DEFECTS.md](docs/DEFECTS.md) (D20, D21, D24; SW-8 is decided for the repository definition, GST-inclusive).
 
 See [technical architecture](docs/ARCHITECTURE.md) and
 [agent harness](docs/AGENT_HARNESS.md) for implementation and contribution rules.

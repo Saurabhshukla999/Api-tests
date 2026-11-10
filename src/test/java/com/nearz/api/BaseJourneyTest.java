@@ -149,7 +149,6 @@ public abstract class BaseJourneyTest {
                                  Map<String, BigDecimal> after,
                                  int services, int products, BigDecimal discountPct) {
         BigDecimal gross = gross(services, products, discountPct);
-        BigDecimal taxable = taxable(services, products, discountPct);
         BigDecimal tax = tax(services, products, discountPct);
         BigDecimal discount = Money.discount(subtotal(services, products), discountPct, ZERO);
 
@@ -187,14 +186,22 @@ public abstract class BaseJourneyTest {
         expectMoved(before, after, "profit.tax_collected", tax);
         expectMoved(before, after, "profit.total_discount", discount);
         expectMoved(before, after, "staff_performance.total_service_revenue", gross);
+        // Service and product revenue are GST-INCLUSIVE and add up to
+        // total_revenue: new_master_aws SalesQuery#revenue_mix_for allocates
+        // Billing::Revenue::ALLOCATED_GROSS_SQL, and swagger says the same.
+        // Production reports service revenue before GST instead; on 10 Nov 2026
+        // the owner chose the repository definition (SW-8, docs/DEFECTS.md).
+        assertTrue(Money.closeEnough(
+                Reports.moved(before, after, "sales.service_revenue")
+                        .add(Reports.moved(before, after, "sales.product_revenue")),
+                gross),
+            "service_revenue + product_revenue moved by "
+          + Reports.moved(before, after, "sales.service_revenue")
+          + " + " + Reports.moved(before, after, "sales.product_revenue")
+          + ", expected the GST-inclusive total " + gross);
         if (products == 0) {
-            // The live Sales report splits GST out of service revenue: the tile
-            // is labelled "Service Revenue (before GST)" and service + product +
-            // gst equals total_revenue on the same response. The swagger text
-            // still says service_revenue is GST-included and sums with
-            // product_revenue to total_revenue; live wins here and the conflict
-            // is recorded as SW-8 in docs/DEFECTS.md.
-            expectMoved(before, after, "sales.service_revenue", taxable);
+            expectMoved(before, after, "sales.service_revenue", gross);
+            expectMoved(before, after, "sales.product_revenue", ZERO);
             expectMoved(before, after, "services.total_revenue", gross);
             expectMoved(before, after, "services.services_sold",
                         BigDecimal.valueOf(services));
