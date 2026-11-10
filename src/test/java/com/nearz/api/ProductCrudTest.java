@@ -263,19 +263,32 @@ public class ProductCrudTest {
                 Map.entry("status", "active"));
     }
 
-    /** Any service id, for the documented linked_service_ids key. */
+    /**
+     * Any service id, for the documented linked_service_ids key.
+     *
+     * On a fresh database this class runs before any block has set the salon
+     * up, so it creates the catalogue itself (the same Catalogue.prepare every
+     * block uses) instead of relying on what earlier runs left behind.
+     */
     private static int firstServiceId() {
-        List<Integer> ids = given().spec(Api.journey())
+        List<Integer> ids = serviceIds();
+        if (ids == null || ids.isEmpty()) {
+            Catalogue.prepare(SALON);
+            ids = serviceIds();
+        }
+        assertEquals(ids == null || ids.isEmpty(), false,
+                "the salon has no service to link a product to");
+        return ids.get(0);
+    }
+
+    private static List<Integer> serviceIds() {
+        return given().spec(Api.journey())
                 .queryParam("per_page", 1)
                 .when()
                 .get("/api/v1/billing/services")
                 .then()
                 .statusCode(200)
                 .extract().jsonPath().getList("data.services.id", Integer.class);
-
-        assertEquals(ids == null || ids.isEmpty(), false,
-                "the salon has no service to link a product to");
-        return ids.get(0);
     }
 
     private int create(String name, int cost, int price) {
